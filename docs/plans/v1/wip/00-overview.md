@@ -451,9 +451,9 @@ upcloud, vultr. Every Karpenter provider for them, as of 2026-10-05:
 | hcloud | [alisonjenkins/karpenter-provider-hetzner @ `66802e53`](https://github.com/alisonjenkins/karpenter-provider-hetzner/tree/66802e53651d89254bd7a8f72bd5a6c948bb1b8f) | none / core v1.11.1 | k3s | prototype | **Unsupported** |
 | hcloud | [PixellUp/karpenter-provider-hetzner @ `f49fee2d`](https://github.com/PixellUp/karpenter-provider-hetzner/tree/f49fee2d7b647b7da792251244f44adc78224809) | stale fork of stubbi | — | stale | **Unsupported** |
 
-Tiers (proposal, §10): Tier 1 = adapter + KWOK + real-cloud e2e; Tier 2 =
-adapter + KWOK + CRD matrix (+ in-process provider tests for Azure); Tier 3 =
-adapter + KWOK + CRD matrix, best effort.
+Support tiers (accepted, ADR-008): Tier 1 = adapter + KWOK + real-cloud e2e;
+Tier 2 = adapter + KWOK + CRD matrix (+ in-process provider tests for Azure);
+Tier 3 = adapter + KWOK + CRD matrix, best effort.
 
 Why the unsupported ones are out:
 
@@ -909,7 +909,7 @@ Hetzner memory stored as GB × 1000.
 |---|---|---|---|---|
 | L1 | Unit and golden tests of the selector engine and adapters | every PR | selection, ranking, churn, requirement building, label-value sanitising, per-adapter key and capacity rules, recorded Keeper fixtures | seconds |
 | L2 | CRD admission matrix | every PR | every generated NodePool is admitted by each provider's own pinned NodePool CRD (server-side dry-run in one kind cluster) | < 1 min |
-| L3 | KWOK e2e with real core Karpenter | every PR | real scheduling, provisioning, drift and the drift-loop detector against SC-generated per-vendor catalogs | ~3–4 min for 8 vendors |
+| L3 | KWOK e2e with real core Karpenter | every PR | real scheduling, provisioning, drift and the drift-loop detector against per-vendor catalogs generated from live SC data, for each core version providers pin (v1.2, v1.8, v1.12, v1.14) | ~3–4 min per core version (8 vendors), versions as parallel jobs |
 | L4 | In-process provider tests (AWS, Azure) | nightly (follow-up plan) | real provider instance-type filtering and NodeClaim label stamping against our NodePools | 2–5 min |
 | L5 | Real AWS e2e (EKS Auto Mode + EKS with Karpenter) | manual | everything, on the real cloud | ~60 min, ≈ $0.6–0.8 |
 
@@ -935,7 +935,22 @@ nodes (kwok-controller), driven by an instance-type catalog file.
   resources, offerings: [{Price, Available, Requirements}]}`. Every key in
   offering requirements becomes well-known, so each vendor's label surface
   (names, provider keys, zone formats) can be emulated. A generator in
-  `test/kwok/` builds one catalog per vendor from a pinned SC snapshot.
+  `test/kwok/` builds one catalog per vendor **in CI from the live Spare
+  Cores data** (Keeper, or the public dump), so the lane also catches data
+  changes that break generation. Because the catalogs change between runs,
+  assertions are relative to the generated catalog (for example "every
+  NodeClaim type is in the NodePool's list", "narrowing drifts exactly the
+  removed types"), never fixed type names; the data timestamp and the
+  generated catalogs are uploaded as CI artifacts so failures can be
+  reproduced.
+- **Core version matrix**: the lane runs once per Karpenter core version the
+  supported providers pin — v1.2 (cloudpilot Alibaba), v1.8 (official Alibaba,
+  OVH), v1.12 (Vultr) and v1.14 (AWS, Azure, GCP, Hetzner, UpCloud; EKS Auto
+  Mode is equivalent) — building `kwok` from each tag. The custom
+  instance-type file (`INSTANCE_TYPES_FILE_PATH`) exists in all of them; the
+  chart values (feature gates) differ per version and are kept per version in
+  `test/kwok/`. Whether older versions also register offering keys as
+  well-known must be verified when the lane is built.
 - KWOK only manages `karpenter.kwok.sh/KWOKNodeClass` NodePools, so the
   controller runs with the test-mode `nodeClassRef` override (F12).
 - Verified scenarios: subset honoured (NodeClaims in 2–3 s, all types, zones,
@@ -1064,14 +1079,5 @@ Planned v1 work orders (written after this overview is reviewed):
 
 ## 10. Open questions
 
-1. **Support tiers** (§5.2): accept the proposed Tier 1/2/3 split, or drop
-   Tier 3 from v1?
-2. **Local test layers** (§8.1): L1–L3 on every PR and L4 as a follow-up?
-3. **KWOK core versions**: test only the latest core, or a matrix of the core
-   versions providers pin (v1.2, v1.8, v1.14)?
-4. **KWOK catalogs**: commit small pinned fixture catalogs generated from an SC
-   snapshot (deterministic), or generate them in CI from the live data?
-5. **Cheap second real cloud**: a manual 1-node Hetzner or UpCloud smoke test
-   in v1, or AWS only?
-6. **Budget alert recipient**: who should receive the EKS budget alerts
-   (configured in the infrastructure repository).
+None at the moment. Decisions taken during the review are recorded in
+[`docs/explanation/DECISIONS.md`](../../../explanation/DECISIONS.md).

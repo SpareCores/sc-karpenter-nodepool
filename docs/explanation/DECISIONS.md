@@ -106,3 +106,19 @@ only from v1.9; restricted domains differ) whichever language is used.
 
 Decision: **kubebuilder (Go)**. The deciding factors are reusing Karpenter's
 own validation code and the AWS/Azure in-process provider fakes for testing.
+
+## ADR-008: Support tiers and test strategy (accepted, 2026-10-07)
+
+- Provider support tiers as proposed in the v1 overview (§5.2): Tier 1 (AWS
+  self-managed, EKS Auto Mode) gets real-cloud e2e; Tier 2 (Azure, AKS NAP,
+  GCP) and Tier 3 (Alibaba, Hetzner, UpCloud, OVH, Vultr) are covered by the
+  local lanes. upcloud-tools, alisonjenkins and PixellUp are unsupported.
+- Test layers L1 (unit/golden), L2 (CRD admission matrix) and L3 (KWOK e2e
+  with real core Karpenter) run on every PR. L4 (in-process AWS/Azure provider
+  tests) is a follow-up; L5 (real AWS e2e) is manual.
+- L3 runs against every Karpenter core version the supported providers pin
+  (v1.2, v1.8, v1.12, v1.14), not only the latest.
+- L3 catalogs are generated in CI from the live Spare Cores data rather than
+  pinned fixtures, so data changes surface early; assertions are therefore
+  relative to the generated catalogs.
+- Real-cloud testing is AWS only for v1 (no Hetzner/UpCloud smoke test yet).
