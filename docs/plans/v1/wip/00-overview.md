@@ -907,9 +907,9 @@ Hetzner memory stored as GB × 1000.
 
 | # | Layer | When | What it proves | Runtime |
 |---|---|---|---|---|
-| L1 | Unit and golden tests of the selector engine and adapters | every PR | selection, ranking, churn, requirement building, label-value sanitising, per-adapter key and capacity rules, recorded Keeper fixtures | seconds |
+| L1 | Unit and golden tests of the selector engine and adapters | every PR | selection, ranking, churn, requirement building, label-value sanitising, per-adapter key and capacity rules, against the committed SC snapshot replayed through a fake Keeper | seconds |
 | L2 | CRD admission matrix | every PR | every generated NodePool is admitted by each provider's own pinned NodePool CRD (server-side dry-run in one kind cluster) | < 1 min |
-| L3 | KWOK e2e with real core Karpenter | every PR | real scheduling, provisioning, drift and the drift-loop detector against per-vendor catalogs generated from live SC data, for each core version providers pin (v1.2, v1.8, v1.12, v1.14) | ~3–4 min per core version (8 vendors), versions as parallel jobs |
+| L3 | KWOK e2e with real core Karpenter | every PR | real scheduling, provisioning, drift and the drift-loop detector against per-vendor catalogs built from the committed SC snapshot, for each core version providers pin (v1.2, v1.8, v1.12, v1.14) | ~3–4 min per core version (8 vendors), versions as parallel jobs |
 | L4 | In-process provider tests (AWS, Azure) | nightly (follow-up plan) | real provider instance-type filtering and NodeClaim label stamping against our NodePools | 2–5 min |
 | L5 | Real AWS e2e (EKS Auto Mode + EKS with Karpenter) | manual | everything, on the real cloud | ~60 min, ≈ $0.6–0.8 |
 
@@ -935,14 +935,8 @@ nodes (kwok-controller), driven by an instance-type catalog file.
   resources, offerings: [{Price, Available, Requirements}]}`. Every key in
   offering requirements becomes well-known, so each vendor's label surface
   (names, provider keys, zone formats) can be emulated. A generator in
-  `test/kwok/` builds one catalog per vendor **in CI from the live Spare
-  Cores data** (Keeper, or the public dump), so the lane also catches data
-  changes that break generation. Because the catalogs change between runs,
-  assertions are relative to the generated catalog (for example "every
-  NodeClaim type is in the NodePool's list", "narrowing drifts exactly the
-  removed types"), never fixed type names; the data timestamp and the
-  generated catalogs are uploaded as CI artifacts so failures can be
-  reproduced.
+  `test/kwok/` builds one catalog per vendor from the committed SC snapshot
+  (§8.6), so every run sees the same data.
 - **Core version matrix**: the lane runs once per Karpenter core version the
   supported providers pin — v1.2 (cloudpilot Alibaba), v1.8 (official Alibaba,
   OVH), v1.12 (Vultr) and v1.14 (AWS, Azure, GCP, Hetzner, UpCloud; EKS Auto
@@ -1060,6 +1054,34 @@ Sweeper: a scheduled workflow (every 3 hours, plus `workflow_dispatch`) in the
 `aws-e2e` environment, deleting `sckn-ci-*` clusters older than 3 hours and
 their orphans (Auto Mode instances are only visible with
 `describe-instances --include-managed-resources`).
+
+### 8.6 Test data: the committed Spare Cores snapshot
+
+All test lanes read one committed dataset instead of calling Keeper:
+`test/data/sc-snapshot/`, a fixed set of raw Keeper responses.
+
+- Contents: `/table/region`, `/table/zone`, `/benchmark_configs`, and per
+  vendor (one test region each: aws us-east-1, azure westeurope, gcp
+  us-central1, alicloud eu-central-1, hcloud fsn1, ovh GRA11, upcloud de-fra1,
+  vultr ewr) `/servers?limit=-1` with on-demand and (where it exists) spot
+  prices, plus one `/servers` query per test benchmark (Geekbench single-core,
+  PassMark single-thread, stress-ng multi-core, `workload_profile:web`,
+  membench RAM latency as the lower-is-better case). 55 queries, about 4.5 MB
+  gzipped JSON.
+- `manifest.json` records every query (path, parameters, file, row count,
+  SHA-256), the fetch time and the Keeper database hash and update time the
+  data comes from (`/healthcheck`); a fetch fails if that hash changes while
+  fetching.
+- Rows are sorted and gzip output is timestamp-free, so identical data gives
+  byte-identical files.
+- Refresh: the manually triggered workflow
+  `.github/workflows/refresh-sc-snapshot.yml` runs
+  `hack/sc-snapshot/fetch.py`, replaces the directory, and commits it to the
+  branch it ran on — only if data files changed (a manifest-only change is
+  ignored). Run it when tests need newer data; nothing else refreshes it.
+- Uses: L1 replays the responses through a fake Keeper (client, selector
+  engine and ranking tests); L3 builds the KWOK catalogs from them. L5 (real
+  AWS) uses the live Keeper API, like production.
 
 ## 9. Plan sequence
 

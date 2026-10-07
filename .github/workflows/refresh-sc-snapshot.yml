@@ -1,0 +1,39 @@
+name: Refresh Spare Cores snapshot
+
+# Fetches a fixed set of Keeper API responses and commits them to
+# test/data/sc-snapshot (replacing the previous snapshot). Every other test job
+# reads the committed snapshot, so test data only changes when this runs.
+on:
+  workflow_dispatch:
+
+concurrency:
+  group: refresh-sc-snapshot
+  cancel-in-progress: false
+
+permissions:
+  contents: write
+
+jobs:
+  refresh:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.12"
+      - name: Fetch snapshot
+        run: python3 hack/sc-snapshot/fetch.py --out test/data/sc-snapshot
+      - name: Commit if changed
+        run: |
+          git add -A test/data/sc-snapshot
+          # the manifest always changes (fetched_at); only data changes count
+          if git diff --cached --quiet -- . ':(exclude)test/data/sc-snapshot/manifest.json'; then
+            echo "Snapshot data unchanged, nothing to commit"
+            exit 0
+          fi
+          db_hash=$(python3 -c 'import json; m=json.load(open("test/data/sc-snapshot/manifest.json")); print(m["keeper"]["database_hash"][:12], m["keeper"]["database_last_updated"])')
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git commit -m "Refresh Spare Cores snapshot (Keeper database ${db_hash})"
+          git push

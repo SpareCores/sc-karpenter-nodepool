@@ -118,7 +118,11 @@ own validation code and the AWS/Azure in-process provider fakes for testing.
   tests) is a follow-up; L5 (real AWS e2e) is manual.
 - L3 runs against every Karpenter core version the supported providers pin
   (v1.2, v1.8, v1.12, v1.14), not only the latest.
-- L3 catalogs are generated in CI from the live Spare Cores data rather than
-  pinned fixtures, so data changes surface early; assertions are therefore
-  relative to the generated catalogs.
+- Test data is a committed Spare Cores snapshot (`test/data/sc-snapshot/`):
+  raw Keeper responses for a fixed query set, refreshed only by the manually
+  triggered "Refresh Spare Cores snapshot" workflow, which fetches the data and
+  commits it over the previous snapshot. Every test job (L1 fixtures, L3
+  catalogs) reads the committed snapshot, so results are reproducible and a
+  refresh is one click. (Decided on 2026-10-07 after first choosing live data
+  per CI run.)
 - Real-cloud testing is AWS only for v1 (no Hetzner/UpCloud smoke test yet).
