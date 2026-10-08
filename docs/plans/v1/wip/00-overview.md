@@ -300,6 +300,8 @@ semantics, coverage and caveats:
 | CPU | `architectures` | `cpu_architecture` | `[arm64]` | `amd64` / `arm64` |
 | CPU | `cpu.manufacturers` | `cpu_manufacturer` | `[AMD, AWS]` | CPU vendor |
 | CPU | `cpu.allocations` | `cpu_allocation` | `[Dedicated]` | `Shared` / `Burstable` / `Dedicated` |
+| CPU | `cpu.clockSpeedMinGHz` | `cpu_speed` | `3.0` | Vendor-reported clock speed (definitions differ by vendor) |
+| CPU | `cpu.hyperthreading` | `vcpus` vs `cpu_cores` | `false` | SMT on (`true`) or one vCPU per physical core (`false`) |
 | CPU features | `cpu.flags.allOf` / `anyOf` / `noneOf` | `cpu_flags` | `allOf: [avx512f, amx_tile]` | Instruction-set requirements |
 | CPU caches | `cpu.caches.{l1d,l1i,l2}PerCoreMinKiB`, `cpu.caches.l3MinMiB`, `cpu.caches.l3TotalMinMiB` | `cpu_l1d_cache`, `cpu_l1i_cache`, `cpu_l2_cache`, `cpu_l3_cache`, `cpu_l3_cache_total` | `{l2PerCoreMinKiB: 2048, l3MinMiB: 32}` | Cache sizes as seen by the VM (L3 is shared) |
 | Memory | `memory.minGiB` / `.maxGiB` | `memory_amount` | `{minGiB: 8}` | Memory bounds |
@@ -308,6 +310,8 @@ semantics, coverage and caveats:
 | GPU | `gpu.memoryPerGpu.minGiB` | `gpu_memory_min` | `{minGiB: 40}` | Memory of the smallest GPU |
 | GPU | `gpu.memoryTotal.minGiB` | `gpu_memory_total` | `{minGiB: 80}` | Sum of GPU memory |
 | GPU | `gpu.manufacturers`, `gpu.models` | `gpu_manufacturer`, `gpu_model` | `models: [L40S, H100]` | Exact SC values |
+| Network | `network.baselineMinGbps` / `.peakMinGbps` | `network_speed_baseline` / `network_speed_max` | `{baselineMinGbps: 10}` | Bandwidth; curated data, mainly AWS, OVH, Alibaba (baseline) |
+| Local storage | `storage.local.minGB` / `.countMin` | `storage_size` / `storages` | `{minGB: 200}` | Bundled instance-local disk |
 | Price | `price.basis` | `server_price.allocation` | `OnDemand` | Which price filters/ranking use |
 | Price | `price.maxHourly` | region-scoped `min_price` (USD) | `"0.50"` | Upper bound per hour (also caps node size) |
 | Price | `price.maxHourlyPerVcpu` | price / `vcpus` | `"0.05"` | Upper bound per vCPU-hour |
@@ -317,9 +321,8 @@ semantics, coverage and caveats:
 | Ranking | `ranking: {score, objective, normalize, band, families}` | any benchmark or profile | `{objective: Score, band: {withinPercent: 12}, families: {min: 3, max: 6}}` | Families within 12% of the best, at least 3, at most 6; all sizes kept |
 | Data quality | `unbenchmarked` | — | `IncludeIfFamilyQualifies` | `Exclude` (default) / `IncludeIfFamilyQualifies` / `Include` |
 
-Not in v1: CPU family/model regex, hyperthreading, clock speed,
-nested virtualisation, memory generation/speed/ECC, local storage, network
-bandwidth, price per GiB, thresholds relative to a named instance type,
+Not in v1: CPU family/model regex, nested virtualisation, memory
+generation/speed/ECC, local storage type, price per GiB, thresholds relative to a named instance type,
 boot time.
 
 ## 5. Provider discovery
@@ -861,6 +864,11 @@ in the NodeClass status when readable.
   | `memory.minGiB` / `.maxGiB` | `memory_min` / `memory_max` | Keeper's "GB" is GiB (× 1024 MiB) |
   | `cpu.caches.l1dPerCoreMinKiB`, `l1iPerCoreMinKiB`, `l2PerCoreMinKiB` | `cpu_l1d_cache_min`, `cpu_l1i_cache_min`, `cpu_l2_cache_min` | KiB per core |
   | `cpu.caches.l3MinMiB`, `l3TotalMinMiB` | `cpu_l3_cache_min`, `cpu_l3_cache_total_min` | MiB |
+  | `cpu.clockSpeedMinGHz` | `cpu_speed_min` | |
+  | `cpu.hyperthreading` | `cpu_hyperthreading` | |
+  | `network.baselineMinGbps`, `.peakMinGbps` | `network_speed_baseline_min`, `network_speed_max_min` | |
+  | `storage.local.minGB` | `storage_size` | |
+  | `storage.local.countMin` (≥ 2 only) | `storage_count_min` | `countMin: 1` is sent as `storage_size=1` (GB) instead, as Keeper counts per-disk entries, which four vendors lack |
   | `memory.perVcpu.minGiB` / `.maxGiB` | `memory_per_vcpu_min` / `memory_per_vcpu_max` | |
   | `gpu.count.min` / `.max` | `gpu_min` / `gpu_max` | `gpu_max=0` = CPU-only |
   | `gpu.memoryPerGpu.minGiB`, `gpu.memoryTotal.minGiB` | `gpu_memory_min`, `gpu_memory_total` | |

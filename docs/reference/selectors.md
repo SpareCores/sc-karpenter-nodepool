@@ -16,6 +16,8 @@ vendor, and the ranking and data-quality rules applied on top.
   - [CPU caches](#cpu-caches)
   - [Memory](#memory)
   - [GPU](#gpu)
+  - [Network](#network)
+  - [Local storage](#local-storage)
   - [Price](#price)
   - [Benchmarks](#benchmarks)
   - [Workload profiles](#workload-profiles)
@@ -106,6 +108,8 @@ spec:
     cpu:
       manufacturers: [AMD, AWS, Intel]
       allocations: [Dedicated]
+      clockSpeedMinGHz: 3.0
+      hyperthreading: false             # true: SMT on; false: one vCPU per core
       flags:
         allOf: [avx2]
         anyOf: []
@@ -123,6 +127,11 @@ spec:
       memoryTotal: {minGiB: 24}
       manufacturers: [NVIDIA]
       models: [L4, L40S]
+    network:
+      baselineMinGbps: 10
+      peakMinGbps: 25
+    storage:
+      local: {minGB: 200, countMin: 1}
     price:
       basis: OnDemand                   # OnDemand | Spot; default from capacity-type
       maxHourly: "0.40"
@@ -175,9 +184,26 @@ Use these to pin or ban types explicitly; they compose with every other filter.
 | `architectures` | `server.cpu_architecture` | Kubernetes names: `amd64` (SC `x86_64`), `arm64` (SC `arm64`). SC `i386`, `arm64_mac` and `x86_64_mac` are never candidates. If the template has a `kubernetes.io/arch` requirement, the two are intersected. | 100 everywhere |
 | `cpu.manufacturers` | `server.cpu_manufacturer` | Exact, case-sensitive SC values: `Intel`, `AMD`, `AWS`, `Ampere`, `Alibaba`, `Microsoft`, `Hygon`. | 100 / 76 / 63 / 97 / 100 / 89 / 99 / 100 |
 | `cpu.allocations` | `server.cpu_allocation` | `Shared`, `Burstable`, `Dedicated`. | 100 everywhere |
+| `cpu.clockSpeedMinGHz` | `server.cpu_speed` | Vendor-reported clock speed, ≥. | 100 / 79 / 40 / 99 / 100 / 100 / 100 / 96 |
+| `cpu.hyperthreading` | `server.vcpus` vs `server.cpu_cores` | `true`: more vCPUs than physical cores (SMT siblings); `false`: one vCPU per physical core. | 100 / 79 / 67 / 85 / 100 / 94 / 100 / 96 |
 
 `cpu_manufacturer` is missing mostly where SC has not run its inspector yet;
 rows without a value are excluded when this filter is set.
+
+`cpu_speed` is what the vendor publishes, and vendors mean different things:
+AWS reports the sustained all-core clock (the same number Karpenter exposes
+only on AWS, as `karpenter.k8s.aws/instance-cpu-sustained-clock-speed-mhz`;
+for example `m7i` 3.2, `m8azn` 5.0, `r7iz` 3.9), others a base or maximum
+clock, and some a flat placeholder (Hetzner and UpCloud report 2.0 for every
+type). Use it as a coarse filter ("no 2.x GHz parts"); for actual single-thread
+speed rank on a [benchmark](#benchmarks).
+
+`cpu.hyperthreading: false` is useful for workloads that are sensitive to SMT
+siblings (latency-critical services, licensing per core, some HPC). Physical
+core counts come from the SC inspector, so types it has not measured have no
+`cpu_cores` and are excluded whenever this field is set. Examples: AWS Graviton
+and the AMD `*a` 7th/8th generation have one vCPU per core; Intel `m7i` and
+`c7i` have two.
 
 ### CPU features
 
@@ -249,6 +275,45 @@ GPU model, count and memory are also available as Karpenter labels on AWS and
 Azure; SC adds measured GPU performance (`llm_speed`, `nvbandwidth`, see
 [benchmarks](#benchmarks)). Vultr's only active GPU plan is stored with
 `gpu_count` 0; the Vultr adapter excludes `vcg-*` plans by name.
+
+### Network
+
+| Field | SC source | Semantics | Coverage |
+|---|---|---|---|
+| `network.baselineMinGbps` | `server.network_speed_baseline` | Guaranteed (baseline) bandwidth in Gbps, ≥. | 100 / 0 / 0 / 100 / 0 / 100 / 0 / 0 |
+| `network.peakMinGbps` | `server.network_speed_max` | Maximum (burst) bandwidth in Gbps, ≥. | 100 / 0 / 0 / 0 / 0 / 100 / 0 / 23 |
+
+Network speeds are not available from the vendors' APIs; Spare Cores collects
+them from vendor documentation and similar sources. Coverage is therefore
+uneven (AWS and OVH complete, Alibaba baseline only, a quarter of Vultr peak
+values, nothing for the others), and new types can lag until they are added.
+Setting either field excludes every type without a value, so on vendors
+without data the selection becomes empty (`Ready=False, reason=NoCandidates`).
+Small AWS sizes burst far above their baseline (`m7i.large`: 0.781 Gbps
+baseline, 12.5 Gbps peak): use the baseline for sustained transfer, the peak
+for bursty traffic.
+
+### Local storage
+
+| Field | SC source | Semantics | Coverage |
+|---|---|---|---|
+| `storage.local.minGB` | `server.storage_size` | Total bundled (instance-local) disk in GB, ≥. Types without local disk have 0. | 100 everywhere (0 = no local disk) |
+| `storage.local.countMin` | number of entries in `server.storages` | Number of local disks, ≥. | per-disk data: aws, azure, gcp, ovh |
+
+Local disk is the instance store / ephemeral disk that comes with the type
+(for example AWS `i4i.large`: 468 GB NVMe), not network block storage, which
+every type can attach. Share of types with any local disk: 41 / 60 / 22 / 14 /
+100 / 100 / 44 / 100.
+
+Per-disk details are missing for alicloud, hcloud, upcloud and vultr even when
+`storage_size` is set. `countMin: 1` is therefore evaluated as
+`storage_size > 0` on every vendor; `countMin` of 2 or more needs per-disk
+data and excludes types from those four vendors.
+
+Karpenter itself exposes local storage only per provider (AWS
+`karpenter.k8s.aws/instance-local-nvme`, Azure
+`karpenter.azure.com/sku-storage-ephemeralos-maxsize`); these selectors work
+the same way on every vendor that has the data.
 
 ### Price
 
@@ -453,10 +518,9 @@ GPU types and only 4 azure ones.
 
 Deliberately not in v1 (see the overview plan for the rationale):
 
-- CPU family / model regex, hyperthreading, clock speed, nested
-  virtualisation (`hw_virt`)
+- CPU family / model regex, nested virtualisation (`hw_virt`)
 - Memory generation, speed, ECC (mostly AWS-only data)
-- Local storage size/type; network bandwidth (AWS, Alibaba and OVH data only)
+- Local storage type (NVMe / SSD / HDD)
 - Price per GiB
 - Thresholds relative to a named instance type ("≥ 1.2× `m7i.large`")
 - Boot time (`average_time_to_start`)
