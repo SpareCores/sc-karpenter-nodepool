@@ -54,7 +54,7 @@ recommender").
 | F3 | Selector engine | All selectors marked v1 in §4, evaluated client-side over Keeper rows |
 | F4 | Family-level ranking with a score band | Keep the families within `ranking.band.withinPercent` of the best, bounded by `ranking.families.min` (capacity floor) and `.max`; every qualifying size of a kept family stays |
 | F5 | Provider adapters | AWS, EKS Auto Mode, Azure, AKS NAP, GCP, Alibaba (2), Hetzner (3), UpCloud, OVH, Vultr (§5, §6) |
-| F6 | Region resolution | Explicit `spec.location.regions`, with auto-detection fallback (§6.3) |
+| F6 | Region detection | Fully automatic: from the template's NodeClass, else from the cluster's node labels (§6.3); no user field |
 | F7 | Safe NodePool generation | Universal requirement keys only (ADR-004); server-side dry-run before apply; never an empty list; CRD-version-aware validation |
 | F8 | Churn control | Hysteresis, removal cap, 24h default refresh (ADR-006) |
 | F9 | Status and observability | Conditions, selected types with scores and prices, exclusion counters, Events with diffs, Prometheus metrics |
@@ -90,9 +90,6 @@ spec:
         consolidationPolicy: WhenEmptyOrUnderutilized
         consolidateAfter: 1m
       limits: {cpu: "256"}
-  location:
-    regions: [us-east-1]             # optional; auto-detected if empty
-    zones: []                        # optional; provider zone label values, verbatim
   selector:                          # see §4 and docs/reference/selectors.md
     vcpus: {min: 2, max: 32}
     cpu: {flags: {allOf: [avx2]}}
@@ -118,13 +115,17 @@ spec:
 |---|---|---|
 | `nodePoolTemplate.metadata` | — | Labels and annotations of the generated NodePool object (not of the nodes). |
 | `nodePoolTemplate.spec` | required | A `karpenter.sh/v1` `NodePoolSpec`. `template.spec.nodeClassRef` is required and selects the provider adapter (§6.1). User requirements are kept verbatim; a user `node.kubernetes.io/instance-type In` list is intersected with the selection. `kubernetes.io/arch` and `karpenter.sh/capacity-type` requirements constrain the selection (§3.4). |
-| `location.regions` | auto-detect | Kubernetes region label values (`us-east-1`, `westeurope`, `us-central1`, `fsn1`, `GRA11`, `ewr`, …); mapped to Spare Cores region ids by the adapter (§6.3). |
-| `location.zones` | none | Zone label values as the provider writes them; emitted verbatim as a zone requirement (§6.4). |
 | `selector`, `ranking` | — | §4 and [`docs/reference/selectors.md`](../../../reference/selectors.md). |
 | `refresh.interval` | `24h` | Re-evaluation period. Spec changes (new `metadata.generation`) re-evaluate immediately; so does the annotation `karpenter.sparecores.com/refresh-requested: <any new value>`. |
 | `churn.*` | `5`, `2`, `3` | §3.5. |
 | `dryRun` | `false` | Compute and report in `status`; never create or update the NodePool. |
 | `deletionPolicy` | `Delete` | `Delete`: the NodePool is owned (ownerReference) and garbage-collected with the `SCNodePool` — Karpenter then drains its nodes. `Orphan`: remove the ownerReference and keep the NodePool. |
+
+There is no region or zone field. Regions only scope the Spare Cores data
+(prices, which types are offered) to where the cluster can launch nodes, and
+the controller detects them (§6.3). To pin zones, put a
+`topology.kubernetes.io/zone` (or, on AWS, `topology.k8s.aws/zone-id`)
+requirement into `nodePoolTemplate`; it is kept verbatim.
 
 Controller-level settings (flags / Helm values, not per object): Keeper URL,
 optional Keeper API key Secret, HTTP timeouts, max concurrent refreshes, the
@@ -136,7 +137,8 @@ test-mode `nodeClassRef` override (F12).
 status:
   observedGeneration: 3
   provider: aws                       # adapter id (§6.1)
-  regions: [us-east-1]                # resolved Kubernetes region values
+  regions: [us-east-1]                # detected Kubernetes region values
+  regionSource: NodeClass             # NodeClass | NodeLabels
   nodePoolName: web-fast
   dataTimestamp: "2026-10-05T10:02:57Z"   # Keeper data freshness
   lastRefreshTime: "2026-10-06T08:00:00Z"
@@ -148,6 +150,7 @@ status:
     - type: NodePoolManaged           # a Karpenter controller set conditions on it
     - type: NodePoolValid             # mirrors the NodePool's ValidationSucceeded
     - type: NodePoolSchedulable       # False on Karpenter NoCompatibleInstanceTypes events
+    - type: RegionConflict            # warning: detection sources disagree (§6.3)
   selected:
     count: 42
     band: {reference: c7a, referenceValue: 2.4, lowestKept: m7a, lowestKeptDeltaPercent: 10.8, widened: false, trimmed: false}
@@ -168,7 +171,7 @@ Printer columns: NodePool, Provider, Types, Ready, Last refresh.
 
 1. Resolve the adapter from `nodeClassRef.group` (and the NodeClass CRD version
    where two providers share a group; §6.1).
-2. Resolve regions (§6.3) and map them to Spare Cores `vendor~region_id`.
+2. Detect regions (§6.3) and map them to Spare Cores `vendor~region_id`.
 3. Fetch Keeper rows (§7.1) and apply the adapter's eligibility filter (§6.2).
 4. Apply template constraints: `kubernetes.io/arch` restricts candidates;
    `karpenter.sh/capacity-type` picks the default price basis.
@@ -184,8 +187,8 @@ Printer columns: NodePool, Provider, Types, Ready, Last refresh.
    - `kubernetes.io/arch`: the user's requirement if present, otherwise
      `In [<architectures of the selected types>]` — except on EKS Auto Mode
      and providers where §6 says otherwise;
-   - zone: `spec.location.zones` if set, otherwise only where the adapter
-     forces it (OVH);
+   - zone: none of our own, except where the adapter forces it (OVH) and the
+     template has no zone requirement;
    - every other user requirement verbatim.
 8. Validate (§3.6), then server-side apply with field manager
    `sc-karpenter-nodepool`, an ownerReference to the `SCNodePool`
@@ -510,8 +513,8 @@ case-insensitively), so the mapping is always exact.
   can never be selected); SC has types newer than the provider's embedded
   snapshot (fine, discovered at runtime).
 - Zones: names (`us-east-1a`) map to different AZs per account; SC `zone_id`
-  is the AZ ID (`use1-az2`). Users should give zone names of their own account
-  in `spec.location.zones`, or AZ IDs via a `topology.k8s.aws/zone-id`
+  is the AZ ID (`use1-az2`). Users pin zones with a template requirement:
+  zone names of their own account, or AZ IDs via a `topology.k8s.aws/zone-id`
   requirement in the template (stamped by the provider; EKS Auto Mode too).
 - Launch: core 600 → provider exotic filter (drops `metal` and GPU/accelerator
   types unless nothing else is left or `minValues` is set), spot-offering filter
@@ -799,10 +802,81 @@ row of §5.3.
 
 ### 6.3 Regions
 
-Explicit `spec.location.regions` wins. Otherwise, in order: the NodeClass
-(Vultr `spec.region`; Hetzner `spec.locations`), then the distinct
-`topology.kubernetes.io/region` labels of the cluster's Nodes. Mapping the
-Kubernetes value to Keeper's `vendor~region_id`:
+Regions are always detected; there is no user field. A Kubernetes cluster
+launches nodes in one cloud region (AWS, Azure, GCP, Alibaba, OVH, Vultr per
+NodeClass); only Hetzner and UpCloud span several Spare Cores regions, because
+Spare Cores stores their locations and zones as regions. The regions only scope
+the Spare Cores data to where the generated NodePool can launch.
+
+Detection order, first hit wins; the result and its source are reported in
+`status.regions` / `status.regionSource`:
+
+1. **The template's NodeClass** (spec or status), which says where *this*
+   NodePool can launch, not just where nodes run today. Zone values are mapped
+   to their region through the SC zone table (`/table/zone`), never by string
+   manipulation.
+2. **NodeClaims of that NodeClass** (core labels them `<group>/<lowercase
+   kind>: <name>`): most providers stamp `topology.kubernetes.io/region` on
+   them, from a region requirement on every instance type.
+3. **Nodes**: the distinct `topology.kubernetes.io/region` labels (set by each
+   cloud's cloud-controller-manager), of that NodeClass's nodes, else of all
+   nodes. A cluster always has at least one node: the one running this
+   controller.
+
+What each provider exposes (checked against the pinned commits, §5.2; EKS Auto
+Mode on a live cluster):
+
+| Adapter | In the NodeClass | Region label on NodeClaims | Source used |
+|---|---|---|---|
+| `aws` | `status.subnets[].zone` / `.zoneID` ([Subnet](https://github.com/aws/karpenter-provider-aws/blob/30c236cafacb3a23fb3a50370d09d71750b56b29/pkg/apis/v1/ec2nodeclass_status.go#L45)) | yes ([types.go](https://github.com/aws/karpenter-provider-aws/blob/30c236cafacb3a23fb3a50370d09d71750b56b29/pkg/providers/instancetype/types.go#L352)) | `status.subnets[].zoneID` = SC `zone_id` → region |
+| `aws-auto` | `status.subnets[].zone` / `.zoneID` (seen on a live cluster) | yes (seen on a live cluster) | same as `aws` |
+| `azure` | nothing ([AKSNodeClassStatus](https://github.com/Azure/karpenter-provider-azure/blob/8878fa43373fbad8974b432fc63fa9b3af921604/pkg/apis/v1beta1/aksnodeclass_status.go#L172); only a capacity reservation group's location, when one is used) | yes ([instancetype.go](https://github.com/Azure/karpenter-provider-azure/blob/8878fa43373fbad8974b432fc63fa9b3af921604/pkg/providers/instancetype/instancetype.go#L144)) | NodeClaim / node labels |
+| `gcp` | nothing ([GCENodeClassStatus](https://github.com/cloudpilot-ai/karpenter-provider-gcp/blob/8b30c3aa03080804b2b9cd199dff656aca7f08b4/pkg/apis/v1alpha1/gcenodeclass_status.go#L29)) | yes ([types.go](https://github.com/cloudpilot-ai/karpenter-provider-gcp/blob/8b30c3aa03080804b2b9cd199dff656aca7f08b4/pkg/providers/instancetype/types.go#L145)) | NodeClaim / node labels |
+| `alicloud-ack` | `status.vSwitches[].zone` ([VSwitch](https://github.com/AliyunContainerService/karpenter-provider-alibabacloud/blob/67a27fd141a777527ac8ce0c66f1e98ab12b04d3/pkg/apis/v1alpha1/ecsnodeclass_types.go#L437)) | yes ([cloudprovider.go](https://github.com/AliyunContainerService/karpenter-provider-alibabacloud/blob/67a27fd141a777527ac8ce0c66f1e98ab12b04d3/pkg/cloudprovider/cloudprovider.go#L597)) | vSwitch zones → region |
+| `alicloud-cloudpilot` | `status.vSwitches[].zoneID` ([VSwitch](https://github.com/cloudpilot-ai/karpenter-provider-alibabacloud/blob/c215c63258d6ee40310bae495047563837e9caab/pkg/apis/v1alpha1/ecsnodeclass_status.go#L31)) | yes ([types.go](https://github.com/cloudpilot-ai/karpenter-provider-alibabacloud/blob/c215c63258d6ee40310bae495047563837e9caab/pkg/providers/instancetype/types.go#L111)) | vSwitch zones → region |
+| `hcloud` (stubbi, echohello) | `spec.locations` ([stubbi](https://github.com/stubbi/karpenter-provider-hetzner/blob/a20777acb552216996db0fe6ccd1e7216aa59b2c/pkg/apis/v1/hcloudnodeclass_types.go#L30), [echohello](https://github.com/echohello-dev/karpenter-provider-hetzner/blob/2676f8f0cdadaca2b0812a9f03b9bf7df9517b06/pkg/apis/v1/hcloudnodeclass_types.go#L54)) | no (zone = location only) | `spec.locations`, each an SC region (via `aliases`) |
+| `hcloud-itsh` | `spec.locations`, resolved in `status.locations[]` (name, network zone, datacenters; [LocationStatus](https://github.com/itsh-cloud/karpenter-provider-hcloud/blob/579b057fa159821703f1d60f52cbd4643011fb3a/api/v1alpha1/hcloudnodeclass_status.go#L104)) | yes, region = location ([types.go](https://github.com/itsh-cloud/karpenter-provider-hcloud/blob/579b057fa159821703f1d60f52cbd4643011fb3a/internal/providers/instancetype/types.go#L177)) | `status.locations[].name` |
+| `upcloud` | `spec.zones`, resolved in `status.zones[].id` ([Zones](https://github.com/kubekanvas/karpenter-provider-upcloud/blob/18fbce1e6649a4849bfc7db836eba561609cbc37/pkg/apis/v1alpha1/upcloudnodeclass_status.go#L55)) | yes, region = zone ([types.go](https://github.com/kubekanvas/karpenter-provider-upcloud/blob/18fbce1e6649a4849bfc7db836eba561609cbc37/pkg/providers/instancetype/types.go#L138)) | `status.zones[].id`, each an SC region |
+| `ovh` | `spec.region` ([required](https://github.com/antonin-a/karpenter-provider-ovhcloud/blob/216d20a8e76179c4252e72cf62245e01165214cf/pkg/apis/v1alpha1/ovhnodeclass.go#L46)), but the provider uses its own environment instead | no | node labels (the MKS cloud-controller-manager writes the uppercase region, for example `GRA11`); `spec.region` only as a cross-check |
+| `vultr` | `spec.region` ([VultrNodeClass](https://github.com/crob1140/karpenter-provider-vultr/blob/cfa9da51c7433e52836bebbfe457a89b69a6fc7c/pkg/apis/v1alpha1/vultrnodeclass_types.go#L27)) | yes ([instancetype.go](https://github.com/crob1140/karpenter-provider-vultr/blob/cfa9da51c7433e52836bebbfe457a89b69a6fc7c/pkg/vultr/instancetype.go#L159)) | `spec.region` |
+
+No provider exposes its controller-level region setting (environment
+variables or flags) through the Kubernetes API, and reading the Karpenter
+Deployment is impossible on managed Karpenter; that is why nodes are the
+last-resort source.
+
+How far the sources can be trusted:
+
+- **NodeClass**: authoritative. It is what the provider launches from, and the
+  provider validates it (AWS lists only subnets it found; stubbi checks every
+  location; Vultr checks region availability; UpCloud marks unknown zones
+  NotReady). Its status is filled asynchronously, so a new NodeClass can be
+  briefly empty — while it is, the provider cannot launch either.
+- **NodeClaim labels**: accurate (stamped from the provider's own
+  configuration) but absent until the NodeClass has launched something, so
+  they confirm rather than bootstrap.
+- **Node labels**: reliable on managed single-region clusters (AKS, GKE, MKS
+  always run system nodes labelled by the cloud-controller-manager). Hybrid or
+  foreign nodes (on-prem, edge, another cloud) can carry other regions or none.
+  The OVH label format (uppercase, for example `GRA11`) comes from OVH
+  documentation and provider code and is not yet verified on a live cluster;
+  the NodeClass `spec.region` serves as a cross-check.
+
+Failure handling:
+
+| Situation | Behaviour |
+|---|---|
+| No source has a value yet (NodeClass not Ready, no NodeClaims, no labelled nodes) | `Ready=False, reason=RegionPending`; retry with backoff; keep the last applied NodePool if there is one |
+| Sources disagree (NodeClass vs NodeClaims vs nodes), or a single-region provider shows several regions | The NodeClass wins when it has a value; otherwise the majority region of this NodeClass's nodes (else of all nodes). A `RegionConflict` warning condition and Event list every value seen |
+| The detected region does not exist in Spare Cores for the vendor (for example a brand-new location) | `Ready=False, reason=RegionUnknown`; no NodePool is written or changed |
+
+Regions are re-detected on every refresh and whenever the template's NodeClass
+changes (the controller watches it). If a deployment ever needs to force the
+region (for example a hybrid cluster whose nodes report the wrong one), the
+escape hatch is a controller-level setting (Helm value), not a field on
+`SCNodePool`.
+
+Mapping the Kubernetes value to Keeper's `vendor~region_id`:
 
 | Adapter | Kubernetes region value | SC lookup |
 |---|---|---|
@@ -813,22 +887,23 @@ Kubernetes value to Keeper's `vendor~region_id`:
 | `upcloud` | `de-fra1` | `region_id` |
 | `ovh` | `GRA11` (CCM, uppercase) | `region_id` |
 
-The SC region table is read once per refresh from Keeper (`GET /regions`).
+The SC region and zone tables are read once per refresh from Keeper
+(`/table/region`, `/table/zone`).
 
 ### 6.4 Zones and capacity types
 
 | Adapter | Zone requirement emitted | Default capacity type (if the template has none) |
 |---|---|---|
-| `aws` | only `spec.location.zones` (zone names) | `on-demand` |
-| `aws-auto` | only `spec.location.zones` | `on-demand` |
-| `azure` | only `spec.location.zones` (`westeurope-1`, `0`) | `on-demand` |
-| `gcp` | only `spec.location.zones` | `on-demand` |
-| `alicloud-ack` | only `spec.location.zones` | `on-demand`; reject templates allowing both |
-| `alicloud-cloudpilot` | only `spec.location.zones` (warn: ignored on-demand) | `on-demand` |
-| `hcloud` | only `spec.location.zones` (locations) | `on-demand`, always |
-| `hcloud-itsh` | only `spec.location.zones` (datacenters) | `on-demand`, always |
-| `upcloud` | only `spec.location.zones` | `on-demand`, always |
-| `ovh` | **always**: user zones, or all SC zones of the region | `on-demand`, always |
+| `aws` | none (template zone names or `topology.k8s.aws/zone-id` kept) | `on-demand` |
+| `aws-auto` | none (template zone names or zone IDs kept) | `on-demand` |
+| `azure` | none (template values like `westeurope-1`, `0` kept) | `on-demand` |
+| `gcp` | none | `on-demand` |
+| `alicloud-ack` | none | `on-demand`; reject templates allowing both |
+| `alicloud-cloudpilot` | none (warn on a template zone requirement: ignored on-demand) | `on-demand` |
+| `hcloud` | none (template values are locations) | `on-demand`, always |
+| `hcloud-itsh` | none (template values are datacenters) | `on-demand`, always |
+| `upcloud` | none | `on-demand`, always |
+| `ovh` | **always**, unless the template has one: all SC zones of the region | `on-demand`, always |
 | `vultr` | none (zone = region) | `on-demand`, always |
 
 "Always" means a template asking for `spot` is rejected with

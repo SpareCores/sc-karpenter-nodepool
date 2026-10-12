@@ -126,3 +126,16 @@ own validation code and the AWS/Azure in-process provider fakes for testing.
   refresh is one click. (Decided on 2026-10-07 after first choosing live data
   per CI run.)
 - Real-cloud testing is AWS only for v1 (no Hetzner/UpCloud smoke test yet).
+
+## ADR-009: Regions are always detected (accepted, 2026-10-12)
+
+`SCNodePool` has no region or zone field. Regions only scope the Spare Cores
+data to where the generated NodePool can launch, and that is already fixed by
+the cluster and the template's NodeClass. The controller detects them: from the
+NodeClass where it exposes them (AWS/Auto Mode subnet zones, Alibaba vSwitch
+zones, Hetzner locations, UpCloud zones, Vultr region), otherwise from the
+`topology.kubernetes.io/region` label of that NodeClass's NodeClaims, and last
+from the nodes' labels. Zone pinning is a normal requirement in `nodePoolTemplate`.
+
+Supersedes the earlier choice of an explicit region list with auto-detection as
+a fallback (2026-10-06): a user-supplied list could only be redundant or wrong.

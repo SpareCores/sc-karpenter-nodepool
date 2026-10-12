@@ -56,8 +56,9 @@ The controller turns one `SCNodePool` into one set of instance types, in this
 order:
 
 1. **Provider and regions.** The provider adapter is chosen from
-   `spec.nodePoolTemplate.spec.template.spec.nodeClassRef.group`. Regions come
-   from `spec.location.regions`, or are auto-detected (see the overview).
+   `spec.nodePoolTemplate.spec.template.spec.nodeClassRef.group`. The target
+   regions are detected from that NodeClass or the cluster's nodes (overview,
+   §6.3); there is no user field.
 2. **Fetch.** For each benchmark used by `spec.selector.benchmarks`,
    `spec.selector.workloadProfiles` or `spec.ranking`, one Keeper query:
    `GET /servers?vendor=<v>&vendor_regions=<v>~<r>&benchmark_id=<id>&benchmark_config=<canonical>&best_price_allocation=<basis>&limit=-1`
@@ -99,7 +100,7 @@ kind: SCNodePool
 metadata:
   name: web-fast
 spec:
-  # nodePoolTemplate, location, refresh, churn: see the overview plan
+  # nodePoolTemplate, refresh, churn: see the overview plan
   selector:
     instanceTypes: {include: ["*"], exclude: ["*.metal*"]}   # globs on api_reference
     families: {include: [], exclude: ["t*"]}                 # globs on SC family
@@ -547,8 +548,8 @@ Deliberately not in v1 (see the overview plan for the rationale):
 Check `status.excluded`: it counts candidates dropped per step (provider
 eligibility, each filter, missing data, ranking). The most common causes are a
 benchmark threshold in the wrong unit, `unbenchmarked: Exclude` on a vendor with
-low coverage (alicloud, gcp), and `price.maxHourly` combined with a region list
-that lacks prices.
+low coverage (alicloud, gcp), and `price.maxHourly` combined with a detected
+region that lacks prices (check `status.regions`).
 
 ### `Ready=False, reason=UnknownBenchmarkConfig`
 
