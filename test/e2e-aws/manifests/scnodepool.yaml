@@ -1,0 +1,35 @@
+# The SCNodePool of the L5 lane: a small, known set of Graviton types that is
+# valid on both targets. Rendered with envsubst (render.sh).
+apiVersion: karpenter.sparecores.com/v1alpha1
+kind: SCNodePool
+metadata:
+  name: ${E2E_SCNODEPOOL}
+spec:
+  nodePoolTemplate:
+    spec:
+      template:
+        spec:
+          nodeClassRef:
+            group: ${E2E_NODECLASS_GROUP}
+            kind: ${E2E_NODECLASS_KIND}
+            name: sckn-ci
+          requirements:
+            - {key: karpenter.sh/capacity-type, operator: In, values: ["${E2E_CAPACITY_TYPE}"]}
+      disruption:
+        # Nothing but drift may replace a node during the test.
+        consolidationPolicy: WhenEmpty
+        consolidateAfter: 24h
+        budgets:
+          - nodes: "100%"
+      limits:
+        cpu: "16"
+  selector:
+    architectures: [arm64]
+    families:
+      include: [c6g, c7g, m6g, m7g, r6g, r7g, t4g]
+    vcpus: {min: 2, max: 2}
+    memory: {minGiB: 4}
+  churn:
+    # The drift test narrows the selection to exclude every type in use; with
+    # the default cap of three removals per refresh it would not converge.
+    maxRemovalsPerRefresh: 100

@@ -1,0 +1,25 @@
+# Where the controller runs on Auto Mode: a NodePool that no SCNodePool
+# generates, so the controller never depends on a node it is responsible for.
+# One small Graviton type; no voluntary disruption.
+apiVersion: karpenter.sh/v1
+kind: NodePool
+metadata:
+  name: sckn-ci-infra
+spec:
+  template:
+    spec:
+      nodeClassRef:
+        group: eks.amazonaws.com
+        kind: NodeClass
+        name: sckn-ci
+      requirements:
+        - {key: karpenter.sh/capacity-type, operator: In, values: [on-demand]}
+        - {key: kubernetes.io/arch, operator: In, values: [arm64]}
+        - {key: node.kubernetes.io/instance-type, operator: In, values: [t4g.medium]}
+  disruption:
+    consolidationPolicy: WhenEmpty
+    consolidateAfter: 24h
+    budgets:
+      - nodes: "0"
+  limits:
+    cpu: "4"

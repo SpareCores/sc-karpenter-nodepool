@@ -112,6 +112,13 @@ test-chart: ## Helm chart: lint, golden `helm template` output, CRD and RBAC in 
 test-docs: ## Check that the relative links and anchors of the Markdown files resolve.
 	python3 hack/check-docs.py
 
+# L5 (real AWS) is run by .github/workflows/e2e-aws.yml, never from here; this
+# target only checks the lane's configuration and scripts, offline.
+.PHONY: test-e2e-aws
+test-e2e-aws: ## L5 configuration: render the eksctl configs and manifests with fake values and validate them offline (no AWS).
+	@test -n "$$SCKN_DEV_CONTAINER" || { echo "run via hack/dev.sh" >&2; exit 1; }
+	test/e2e-aws/validate.sh
+
 ##@ Build
 
 .PHONY: build

@@ -1,0 +1,15 @@
+# EC2NodeClass of the self-managed Karpenter cluster: the node role of the
+# CI account, the default VPC's subnets and the cluster security group (which
+# EKS tags with aws:eks:cluster-name).
+apiVersion: karpenter.k8s.aws/v1
+kind: EC2NodeClass
+metadata:
+  name: sckn-ci
+spec:
+  role: ${SCKN_KARPENTER_NODE_ROLE_NAME}
+  amiSelectorTerms:
+    - alias: al2023@latest
+  subnetSelectorTerms: ${E2E_SUBNET_TERMS}
+  securityGroupSelectorTerms:
+    - tags:
+        aws:eks:cluster-name: ${E2E_CLUSTER}

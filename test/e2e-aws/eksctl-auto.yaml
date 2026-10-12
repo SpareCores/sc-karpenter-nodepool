@@ -1,0 +1,32 @@
+# EKS Auto Mode cluster of the L5 lane (overview §8.5). A template: the
+# workflow renders it with envsubst from repository variables
+# (test/e2e-aws/render.sh); nothing account-specific is committed.
+#
+# Only the built-in "system" pool is enabled. setup-auto.sh adds a custom
+# NodeClass and an infrastructure NodePool for the controller itself.
+apiVersion: eksctl.io/v1alpha5
+kind: ClusterConfig
+
+metadata:
+  name: ${E2E_CLUSTER}
+  region: ${AWS_REGION}
+  version: "1.35"
+
+iam:
+  # The CI role cannot create IAM: the roles exist already.
+  serviceRoleARN: ${SCKN_CLUSTER_ROLE_ARN}
+
+vpc:
+  id: ${SCKN_VPC_ID}
+  subnets:
+    # The default VPC: public subnets only, so no NAT gateway.
+    public: ${E2E_SUBNETS_MAP}
+
+accessConfig:
+  # Auto Mode needs access entries; the creator (the CI role) is cluster admin.
+  authenticationMode: API
+
+autoModeConfig:
+  enabled: true
+  nodePools: [system]
+  nodeRoleARN: ${E2E_AUTO_NODE_ROLE_ARN}

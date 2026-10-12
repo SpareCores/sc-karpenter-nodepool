@@ -1,0 +1,29 @@
+# Three pods that repel each other and ask for 900m each: Karpenter must launch
+# three nodes of the SCNodePool's NodePool.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: pause
+  namespace: default
+spec:
+  replicas: 3
+  selector:
+    matchLabels: {app: pause}
+  template:
+    metadata:
+      labels: {app: pause}
+    spec:
+      nodeSelector:
+        karpenter.sh/nodepool: ${E2E_SCNODEPOOL}
+      affinity:
+        podAntiAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+            - topologyKey: kubernetes.io/hostname
+              labelSelector:
+                matchLabels: {app: pause}
+      terminationGracePeriodSeconds: 0
+      containers:
+        - name: pause
+          image: registry.k8s.io/pause:3.10
+          resources:
+            requests: {cpu: 900m, memory: 64Mi}

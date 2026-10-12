@@ -1,0 +1,10 @@
+# Helm values of the controller on the Auto Mode cluster (the chart is
+# deployed by deploy-controller.sh with --set image.tag=sha-<commit>).
+#
+# Auto Mode launches every node, so the controller is pinned to the
+# infrastructure NodePool that no SCNodePool generates (setup-auto.sh).
+nodeSelector:
+  kubernetes.io/os: linux
+  karpenter.sh/nodepool: sckn-ci-infra
+logging:
+  level: debug

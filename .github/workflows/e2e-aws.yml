@@ -1,0 +1,228 @@
+name: E2E AWS
+
+# L5 (overview §8.5): the controller on a real EKS Auto Mode cluster and on a
+# real EKS cluster with self-managed Karpenter, in the AWS account of the
+# `aws-e2e` environment. Manual only: a run costs about $0.6-0.8 and takes
+# about an hour. The scripts are in test/e2e-aws/.
+#
+#   targets       both | auto | karpenter
+#   capacityType  on-demand (default) | spot. Spot can fail a run for reasons
+#                 that are not ours (no interruption queue on the Karpenter
+#                 cluster, capacity for a narrow type list); L3 covers spot.
+#
+# The environment only admits deployments from main, and the OIDC role of
+# AWS_ROLE_ARN only trusts jobs of that environment. The identifiers of the
+# account are repository variables (vars.*), masked in the log; the
+# diagnostics artifact is redacted.
+on:
+  workflow_dispatch:
+    inputs:
+      targets:
+        description: Which clusters to test
+        type: choice
+        options: [both, auto, karpenter]
+        default: both
+      capacityType:
+        description: Capacity type of the test NodePools
+        type: choice
+        options: [on-demand, spot]
+        default: on-demand
+
+# One run at a time: the clusters have fixed names.
+concurrency:
+  group: e2e-aws
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+env:
+  IMAGE: ghcr.io/sparecores/sc-karpenter-nodepool
+
+jobs:
+  # The controller image of this commit, for both architectures (the managed
+  # node group and the Auto Mode infrastructure pool are Graviton), public on
+  # ghcr so that the clusters need no pull secret.
+  image:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
+        with:
+          persist-credentials: false
+
+      - uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1
+
+      - uses: docker/login-action@dbcb813823bdd20940b903addbd779551569679f # v4.6.0
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build and push the multi-arch image
+        uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
+        with:
+          context: .
+          platforms: linux/amd64,linux/arm64
+          push: true
+          tags: ${{ env.IMAGE }}:sha-${{ github.sha }}
+          provenance: false
+
+      # The clusters pull anonymously: fail now, not after 20 minutes of EKS
+      # provisioning, if the package is not public.
+      - name: The image is pullable without credentials
+        run: |
+          docker logout ghcr.io
+          docker buildx imagetools inspect "${IMAGE}:sha-${GITHUB_SHA}" | tee inspect.txt
+          grep -q 'linux/amd64' inspect.txt
+          grep -q 'linux/arm64' inspect.txt
+
+  targets:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    outputs:
+      matrix: ${{ steps.matrix.outputs.matrix }}
+    steps:
+      - id: matrix
+        env:
+          TARGETS: ${{ inputs.targets }}
+        run: |
+          case "${TARGETS}" in
+            both) matrix='["auto","karpenter"]' ;;
+            auto) matrix='["auto"]' ;;
+            karpenter) matrix='["karpenter"]' ;;
+            *) echo "unknown targets: ${TARGETS}" >&2; exit 1 ;;
+          esac
+          echo "matrix=${matrix}" >>"${GITHUB_OUTPUT}"
+
+  e2e:
+    name: e2e (${{ matrix.target }})
+    needs: [image, targets]
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+    environment: aws-e2e
+    permissions:
+      contents: read
+      id-token: write
+    strategy:
+      fail-fast: false
+      matrix:
+        target: ${{ fromJSON(needs.targets.outputs.matrix) }}
+    env:
+      E2E_TARGET: ${{ matrix.target }}
+      E2E_CAPACITY_TYPE: ${{ inputs.capacityType }}
+      E2E_IMAGE_TAG: sha-${{ github.sha }}
+      E2E_OUT: ${{ github.workspace }}/e2e-out
+      KUBECONFIG: ${{ github.workspace }}/e2e-out/kubeconfig
+      AWS_REGION: ${{ vars.AWS_REGION }}
+      AWS_ACCOUNT_ID: ${{ vars.AWS_ACCOUNT_ID }}
+      SCKN_VPC_ID: ${{ vars.SCKN_VPC_ID }}
+      SCKN_SUBNET_IDS: ${{ vars.SCKN_SUBNET_IDS }}
+      SCKN_CLUSTER_ROLE_ARN: ${{ vars.SCKN_CLUSTER_ROLE_ARN }}
+      SCKN_AUTO_NODE_ROLE_NAME: ${{ vars.SCKN_AUTO_NODE_ROLE_NAME }}
+      SCKN_KARPENTER_NODE_ROLE_NAME: ${{ vars.SCKN_KARPENTER_NODE_ROLE_NAME }}
+      SCKN_KARPENTER_NODE_ROLE_ARN: ${{ vars.SCKN_KARPENTER_NODE_ROLE_ARN }}
+      SCKN_KARPENTER_CONTROLLER_ROLE_ARN: ${{ vars.SCKN_KARPENTER_CONTROLLER_ROLE_ARN }}
+    steps:
+      # Variables are not secrets, but the repository is public and the
+      # account is not: keep the identifiers out of the log.
+      - name: Mask the account's identifiers
+        run: |
+          for v in AWS_ACCOUNT_ID SCKN_VPC_ID SCKN_CLUSTER_ROLE_ARN SCKN_KARPENTER_NODE_ROLE_ARN \
+            SCKN_KARPENTER_CONTROLLER_ROLE_ARN SCKN_AUTO_NODE_ROLE_NAME SCKN_KARPENTER_NODE_ROLE_NAME; do
+            if [[ -z "${!v}" ]]; then
+              echo "::error::repository variable ${v} is not set"
+              exit 1
+            fi
+            echo "::add-mask::${!v}"
+          done
+          tr -d '[]"' <<<"${SCKN_SUBNET_IDS}" | tr -s ',[:space:]' '\n' | grep -v '^$' |
+            while read -r id; do echo "::add-mask::${id}"; done
+
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
+        with:
+          persist-credentials: false
+
+      - name: Install eksctl, kubectl and Helm
+        run: test/e2e-aws/install-tools.sh
+
+      # The session of the OIDC role is short (one hour by default) and a run
+      # is longer: the credentials are renewed before the tests and before
+      # the teardown.
+      - name: AWS credentials
+        uses: aws-actions/configure-aws-credentials@e1253824e5c10ff9df46874f81ed3ec929e19cfd # v6.3.0
+        with:
+          role-to-assume: ${{ vars.AWS_ROLE_ARN }}
+          aws-region: ${{ vars.AWS_REGION }}
+
+      - name: Render the configuration
+        run: |
+          mkdir -p "${E2E_OUT}"
+          test/e2e-aws/render.sh
+
+      - name: Pre-flight cleanup of a previous run
+        timeout-minutes: 60
+        run: test/e2e-aws/preflight-cleanup.sh
+
+      - name: Create the cluster
+        timeout-minutes: 50
+        run: |
+          eksctl create cluster --config-file "${E2E_OUT}/rendered/eksctl.yaml" --kubeconfig "${KUBECONFIG}"
+          kubectl get nodes -o wide
+
+      - name: AWS credentials (renewed)
+        uses: aws-actions/configure-aws-credentials@e1253824e5c10ff9df46874f81ed3ec929e19cfd # v6.3.0
+        with:
+          role-to-assume: ${{ vars.AWS_ROLE_ARN }}
+          aws-region: ${{ vars.AWS_REGION }}
+
+      - name: Set up Auto Mode (NodeClass, infrastructure NodePool)
+        if: matrix.target == 'auto'
+        timeout-minutes: 20
+        run: test/e2e-aws/setup-auto.sh
+
+      - name: Set up Karpenter (chart, EC2NodeClass)
+        if: matrix.target == 'karpenter'
+        timeout-minutes: 30
+        run: test/e2e-aws/setup-karpenter.sh
+
+      - name: Deploy the controller
+        timeout-minutes: 20
+        run: test/e2e-aws/deploy-controller.sh
+
+      - name: Selection and provisioning
+        timeout-minutes: 30
+        run: test/e2e-aws/test-select.sh
+
+      - name: Drift
+        timeout-minutes: 30
+        run: test/e2e-aws/test-drift.sh
+
+      - name: Diagnostics
+        if: failure() || cancelled()
+        run: test/e2e-aws/dump-diagnostics.sh
+
+      - name: Upload the diagnostics
+        if: failure() || cancelled()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: diagnostics-${{ matrix.target }}
+          path: ${{ env.E2E_OUT }}/diagnostics/
+          if-no-files-found: ignore
+
+      # Always: a cluster that outlives the run costs $2.40 a day. The
+      # sweeper (e2e-aws-sweeper.yml) is the second line of defence.
+      - name: AWS credentials (for the teardown)
+        if: always()
+        uses: aws-actions/configure-aws-credentials@e1253824e5c10ff9df46874f81ed3ec929e19cfd # v6.3.0
+        with:
+          role-to-assume: ${{ vars.AWS_ROLE_ARN }}
+          aws-region: ${{ vars.AWS_REGION }}
+
+      - name: Teardown
+        if: always()
+        timeout-minutes: 75
+        run: test/e2e-aws/teardown.sh

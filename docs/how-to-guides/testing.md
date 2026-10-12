@@ -39,7 +39,8 @@ runs the same:
 | 5 | `hack/dev.sh make test-kwok` | L3: real core Karpenter in kind. |
 | 6 | `hack/dev.sh make test-chart` | Helm chart: `helm lint --strict`, the values schema, golden `helm template` output, the chart's CRD and RBAC equal to `config/`, every manager flag settable from the chart. |
 | 7 | `hack/dev.sh make test-docs` | Relative links and anchors of all Markdown files resolve. |
-| 8 | `hack/dev.sh bash -c 'actionlint && shellcheck -x hack/*.sh test/*.sh test/*/*.sh'` | Workflows and shell scripts. |
+| 8 | `hack/dev.sh make test-e2e-aws` | The configuration of the real-AWS lane (L5): the eksctl configs and manifests rendered with fake values and validated offline, no AWS access. |
+| 9 | `hack/dev.sh bash -c 'actionlint && shellcheck -x hack/*.sh test/*.sh test/*/*.sh'` | Workflows and shell scripts. |
 
 Tests are table-driven and sit next to the code; large outputs are golden files
 under `testdata/` (`go test ./internal/nodepool -update` rewrites the NodePool
@@ -54,7 +55,7 @@ diff before you keep it).
 | L2 CRD matrix | `make test-crd` | every PR | Server-side dry-run of the generated NodePools (and negative cases) against the NodePool CRD each supported provider ships, one kind cluster, under a minute plus downloads. Logs in `test/crd/.out/`. |
 | L3 KWOK | `make test-kwok` | every PR, once per core version | Real scheduling, provisioning, drift and the drift-loop detector with core Karpenter's KWOK provider and per-vendor catalogs built from the snapshot, in kind. About 10 minutes per core version. Logs and catalogs in `test/kwok/.out/<version>/`. |
 | L4 provider tests | not yet | | AWS and Azure in-process provider tests (planned). |
-| L5 real AWS | manual (planned) | | EKS Auto Mode and EKS with Karpenter on a real account (planned). |
+| L5 real AWS | manual (GitHub workflow) | | The controller on EKS Auto Mode and on EKS with self-managed Karpenter in a real account: selection, provisioning and drift. About an hour and $0.6-0.8 per run. See [L5 in detail](#l5-in-detail). |
 
 ### L3 in detail
 
@@ -81,6 +82,45 @@ it. For debugging a failing scenario, `KEEP_CLUSTER=1` plus
 
 On hosts whose Docker root is on ZFS, kubelet cannot start in a kind node; the
 lanes detect that and mount the node's data directories from tmpfs.
+
+### L5 in detail
+
+L5 runs only in GitHub Actions, in the `aws-e2e` environment (deployments from
+`main`; its repository variables name the account's VPC, subnets and the
+pre-created IAM roles), and costs money. Nothing in this repository, and no
+command of this guide, calls AWS from your machine. The workflow
+`.github/workflows/e2e-aws.yml` (manual trigger; inputs `targets`:
+`both|auto|karpenter`, and `capacityType`: `on-demand|spot`):
+
+1. builds the controller image of the commit (`sha-<commit>`, linux/amd64 and
+   arm64) and pushes it to the public package on ghcr;
+2. per target, in parallel: removes leftovers of a previous run, creates the
+   cluster with the pinned eksctl (`test/e2e-aws/eksctl-auto.yaml`,
+   `eksctl-karpenter.yaml`, rendered with `envsubst` from the repository
+   variables), sets up Auto Mode's custom NodeClass `sckn-ci` and an
+   infrastructure NodePool, or Karpenter v1.14.1 with Pod Identity and an
+   `EC2NodeClass`, and installs the controller from the Helm chart;
+3. `test-select.sh` applies an SCNodePool that selects eight Graviton types
+   (`test/e2e-aws/expected-instance-types.txt`), checks the NodePool's list and
+   the nodes Karpenter launches for three 900m pods that repel each other;
+   `test-drift.sh` excludes the types in use and expects the NodePool update,
+   `Drifted=True` and convergence within 15 minutes;
+4. always: diagnostics on failure (redacted, uploaded as an artifact), then
+   `teardown.sh` deletes the workload, the pools and the cluster, and removes
+   orphaned instances, launch templates and instance profiles.
+
+`.github/workflows/e2e-aws-sweeper.yml` (`workflow_dispatch`; its three-hourly
+schedule is commented out until the maintainer enables it) deletes `sckn-ci-*`
+clusters older than three hours and their orphans.
+
+What you can check offline, in the dev container, is the lane's configuration:
+`hack/dev.sh make test-e2e-aws` renders the templates with fake values,
+validates the eksctl configs against eksctl's JSON schema of the pinned release
+(downloaded from GitHub with a checksum, cached in `test/e2e-aws/.cache/`) and
+the SCNodePool and NodePool against their CRDs, and checks the names and roles
+the scripts rely on. `go test ./internal/providers -run TestE2EAWSSelection`
+checks, against the committed snapshot, that the e2e SCNodePool selects exactly
+the expected list for both AWS adapters.
 
 ## Develop and try changes
 

@@ -43,6 +43,9 @@ jobs:
       - name: Documentation links
         run: hack/dev.sh make test-docs
 
+      - name: L5 configuration (eksctl configs and manifests, offline)
+        run: hack/dev.sh make test-e2e-aws
+
       - name: Lint workflows and scripts
         run: hack/dev.sh bash -c 'actionlint && shellcheck -x hack/*.sh test/*.sh test/*/*.sh'
 

@@ -1,0 +1,65 @@
+name: E2E AWS sweeper
+
+# The safety net of the L5 lane (e2e-aws.yml): deletes sckn-ci-* EKS clusters
+# older than three hours (a run takes about an hour), and what such clusters
+# leave behind: instances tagged eks:eks-cluster-name (EKS Auto Mode instances
+# are only visible with describe-instances --include-managed-resources), Karpenter
+# launch templates, sckn-ci-* instance profiles and eksctl stacks in
+# DELETE_FAILED. test/e2e-aws/sweep.sh does the work.
+#
+# Manual only for now. Nothing may call AWS by itself until the maintainer
+# decides: to run it every three hours, uncomment the schedule below.
+on:
+  workflow_dispatch:
+    inputs:
+      dryRun:
+        description: Only list what would be deleted
+        type: boolean
+        default: false
+  # schedule:
+  #   - cron: "17 */3 * * *"
+
+# Separate from the e2e group: the sweeper must not wait for a run, and it
+# leaves clusters younger than three hours alone.
+concurrency:
+  group: e2e-aws-sweeper
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  sweep:
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+    environment: aws-e2e
+    permissions:
+      contents: read
+      id-token: write
+    env:
+      AWS_REGION: ${{ vars.AWS_REGION }}
+      DRY_RUN: ${{ inputs.dryRun && '1' || '' }}
+    steps:
+      - name: Mask the account's identifiers
+        env:
+          AWS_ACCOUNT_ID: ${{ vars.AWS_ACCOUNT_ID }}
+        run: |
+          if [[ -n "${AWS_ACCOUNT_ID}" ]]; then
+            echo "::add-mask::${AWS_ACCOUNT_ID}"
+          fi
+
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
+        with:
+          persist-credentials: false
+
+      - name: Install eksctl, kubectl and Helm
+        run: test/e2e-aws/install-tools.sh
+
+      - name: AWS credentials
+        uses: aws-actions/configure-aws-credentials@e1253824e5c10ff9df46874f81ed3ec929e19cfd # v6.3.0
+        with:
+          role-to-assume: ${{ vars.AWS_ROLE_ARN }}
+          aws-region: ${{ vars.AWS_REGION }}
+
+      - name: Sweep
+        run: test/e2e-aws/sweep.sh

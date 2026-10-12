@@ -1,0 +1,16 @@
+# Custom EKS Auto Mode NodeClass (never named "default", which only exists
+# while a built-in pool is enabled): the node role of the cluster's Auto Mode
+# configuration, the default VPC's subnets, the cluster security group and
+# 20 GiB of ephemeral storage.
+apiVersion: eks.amazonaws.com/v1
+kind: NodeClass
+metadata:
+  name: sckn-ci
+spec:
+  role: ${SCKN_AUTO_NODE_ROLE_NAME}
+  subnetSelectorTerms: ${E2E_SUBNET_TERMS}
+  securityGroupSelectorTerms:
+    - tags:
+        aws:eks:cluster-name: ${E2E_CLUSTER}
+  ephemeralStorage:
+    size: 20Gi

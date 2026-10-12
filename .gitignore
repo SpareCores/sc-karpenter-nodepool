@@ -21,6 +21,7 @@ go.work
 test/crd/.cache/
 test/kwok/.cache/
 test/kwok/.out/
+test/e2e-aws/.cache/
 
 # lane outputs (logs, generated catalogs)
 .out/

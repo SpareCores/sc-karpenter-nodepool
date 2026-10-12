@@ -21,8 +21,10 @@ ARG BUILDX_VERSION=v0.38.0
 
 SHELL ["/bin/bash", "-euxo", "pipefail", "-c"]
 
+# python3-jsonschema (from the distribution) validates the L5 lane's eksctl
+# configs offline (test/e2e-aws/validate.sh); gettext-base is envsubst.
 RUN apt-get update \
- && apt-get install -y --no-install-recommends make git ca-certificates curl xz-utils python3 \
+ && apt-get install -y --no-install-recommends make git ca-certificates curl xz-utils python3 python3-jsonschema gettext-base \
  && rm -rf /var/lib/apt/lists/*
 
 # Prebuilt binaries. TARGETARCH is amd64 or arm64; tools that name the

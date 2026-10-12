@@ -1,0 +1,52 @@
+# EKS cluster with self-managed Karpenter, for the L5 lane (overview §8.5). A
+# template: the workflow renders it with envsubst from repository variables
+# (test/e2e-aws/render.sh); nothing account-specific is committed.
+#
+# One small managed node group runs Karpenter and the controller; Karpenter
+# launches everything else (setup-karpenter.sh installs it with Helm).
+apiVersion: eksctl.io/v1alpha5
+kind: ClusterConfig
+
+metadata:
+  name: ${E2E_CLUSTER}
+  region: ${AWS_REGION}
+  version: "1.35"
+
+iam:
+  # The CI role cannot create IAM: the roles exist already.
+  serviceRoleARN: ${SCKN_CLUSTER_ROLE_ARN}
+  # Karpenter's credentials through EKS Pod Identity (the role's trust policy
+  # names pods.eks.amazonaws.com). The service account is created by the
+  # Karpenter chart.
+  podIdentityAssociations:
+    - namespace: kube-system
+      serviceAccountName: karpenter
+      roleARN: ${SCKN_KARPENTER_CONTROLLER_ROLE_ARN}
+
+vpc:
+  id: ${SCKN_VPC_ID}
+  subnets:
+    # The default VPC: public subnets only, so no NAT gateway.
+    public: ${E2E_SUBNETS_MAP}
+
+accessConfig:
+  authenticationMode: API
+
+addons:
+  - name: eks-pod-identity-agent
+  - name: vpc-cni
+  - name: kube-proxy
+  - name: coredns
+
+managedNodeGroups:
+  - name: system
+    amiFamily: AmazonLinux2023
+    instanceType: t4g.medium
+    desiredCapacity: 2
+    minSize: 2
+    maxSize: 2
+    volumeSize: 20
+    iam:
+      # The node role of Karpenter's nodes: the group's access entry also
+      # admits the nodes Karpenter launches with it.
+      instanceRoleARN: ${SCKN_KARPENTER_NODE_ROLE_ARN}

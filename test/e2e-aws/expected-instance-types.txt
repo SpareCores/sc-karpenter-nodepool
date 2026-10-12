@@ -1,0 +1,15 @@
+# The instance types the e2e SCNodePool (scnodepool.yaml) must select in
+# us-east-2, on both targets: Graviton (arm64) c6g/c7g/m6g/m7g/r6g/r7g/t4g with
+# 2 vCPUs and at least 4 GiB. All are launchable on EKS Auto Mode (listed in
+# the EKS price list, more than one vCPU, not nano/micro/small) and by the
+# launching roles of the CI account (t4g up to medium/large, c/m/r up to
+# xlarge). The Go test internal/providers/e2eaws_test.go checks this list
+# against the committed Spare Cores snapshot (us-east-1) for both providers.
+c6g.large
+c7g.large
+m6g.large
+m7g.large
+r6g.large
+r7g.large
+t4g.large
+t4g.medium
