@@ -1175,19 +1175,10 @@ All test lanes read one committed dataset instead of calling Keeper:
 
 ## 9. Plan sequence
 
-Planned v1 work orders (written after this overview is reviewed):
-
-| # | Plan | Depends on |
-|---|---|---|
-| 00 | This overview | — |
-| 01 | Project scaffold (kubebuilder, Go), CRD types, conventions | 00 |
-| 02 | AWS e2e workflow + sweeper (uses the Pulumi resources of §8.5) | 01 (image build) |
-| 03 | Keeper client + selector engine + ranking + churn (L1 tests, recorded fixtures) | 01 |
-| 04 | Provider adapters (§6) | 03 |
-| 05 | Controller: reconcile, NodePool apply, status, generated-pool health, metrics | 04 |
-| 06 | Local test lanes: CRD matrix (L2) and KWOK e2e (L3) in CI | 05 |
-| 07 | Packaging: Helm chart, image, release workflow, how-to guides | 05 |
-| 08 | In-process provider tests (L4) | 05 |
+The work orders are in [`../README.md`](../README.md) (01 scaffold, 02 Keeper
+client and selection, 03 provider adapters, 04 controller, 05 local test
+lanes, 06 AWS e2e, 07 packaging, 08 in-process provider tests), with shared
+rules in [`../CONVENTIONS.md`](../CONVENTIONS.md).
 
 ## 10. Open questions
 

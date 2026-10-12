@@ -24,12 +24,14 @@ Execution protocol:
 
 | # | file | status | milestone | depends on |
 |---|---|---|---|---|
-| 00 | `wip/00-overview.md` | review | features, API, selectors, provider discovery, testing strategy | — |
-| 01 | — | not written | project scaffold, CRD types, conventions | 00 |
-| 02 | — | not written | AWS e2e workflow + sweeper | 01 |
-| 03 | — | not written | Keeper client, selector engine, ranking, churn | 01 |
-| 04 | — | not written | provider adapters | 03 |
-| 05 | — | not written | controller: reconcile, apply, status, health, metrics | 04 |
-| 06 | — | not written | CRD matrix + KWOK e2e lanes in CI | 05 |
-| 07 | — | not written | packaging, release, how-to guides | 05 |
-| 08 | — | not written | in-process provider tests (AWS, Azure) | 05 |
+| 00 | `wip/00-overview.md` | reference | features, API, selectors, provider discovery, testing strategy | — |
+| 01 | `wip/01-scaffold.md` | todo | dev container, kubebuilder project, `SCNodePool` API + CRD, CI | 00 |
+| 02 | `wip/02-keeper-and-selection.md` | todo | Keeper client, snapshot replay, selectors, ranking, churn | 01 |
+| 03 | `wip/03-provider-adapters.md` | todo | provider adapters, eligibility, region detection, requirement rules | 02 |
+| 04 | `wip/04-controller.md` | todo | reconcile, NodePool render/validate/apply, status, health, metrics | 03 |
+| 05 | `wip/05-local-test-lanes.md` | todo | L2 CRD admission matrix + L3 KWOK e2e (core version matrix) in CI | 04 |
+| 06 | `wip/06-aws-e2e.md` | todo | L5 AWS e2e workflow + sweeper (written and validated, not run) | 05 |
+| 07 | `wip/07-packaging.md` | todo | Helm chart, release workflow, how-to guides, tutorial | 04 |
+| 08 | `wip/08-provider-inprocess-tests.md` | todo | L4 in-process AWS/Azure provider tests | 04 |
+
+Shared rules for every plan: [`CONVENTIONS.md`](CONVENTIONS.md).
