@@ -122,6 +122,13 @@ func TestClientReaderNoCRD(t *testing.T) {
 	if got, err := r.NodeClass(ctx, ec2NodeClassRef); err != nil || got != nil {
 		t.Errorf("NodeClass: %v %v", got, err)
 	}
+	// No served version at all: the CRD is not installed (the controller's
+	// test mode, where the template's NodeClass does not exist).
+	unversioned := ec2NodeClassRef
+	unversioned.Version = ""
+	if got, err := (ClientReader{Client: fake.NewClientBuilder().WithScheme(testScheme(t)).Build()}).NodeClass(ctx, unversioned); err != nil || got != nil {
+		t.Errorf("NodeClass without a version: %v %v", got, err)
+	}
 	if got, err := r.NodeClaimLabels(ctx, nil); err != nil || got != nil {
 		t.Errorf("NodeClaims: %v %v", got, err)
 	}

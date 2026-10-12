@@ -59,6 +59,10 @@ const (
 	controllerName = "sc-karpenter-nodepool"
 )
 
+// staleRetry is how soon a reconcile whose status write conflicted (it read a
+// lagging cache) runs again.
+const staleRetry = 200 * time.Millisecond
+
 // NodeClaimGVK is Karpenter core's NodeClaim.
 var NodeClaimGVK = providers.NodeClaimListGVK.GroupVersion().WithKind("NodeClaim")
 
@@ -180,7 +184,20 @@ func (r *SCNodePoolReconciler) Reconcile(ctx context.Context, req ctrl.Request) 
 		return ctrl.Result{}, err
 	}
 	if !equality.Semantic.DeepEqual(ru.orig.Status, pool.Status) {
-		if err := r.Status().Patch(ctx, &pool, client.MergeFrom(ru.orig)); err != nil {
+		// Optimistic lock: the object came from the informer cache, which may
+		// not have seen this controller's previous status write yet. A merge
+		// patch replaces the whole conditions list, so applying one computed
+		// from the stale object would drop conditions (and the refresh that
+		// set them is not repeated until the next interval).
+		err := r.Status().Patch(ctx, &pool, client.MergeFromWithOptions(ru.orig, client.MergeFromWithOptimisticLock{}))
+		if apierrors.IsConflict(err) {
+			if refreshed {
+				// The result of this refresh was not recorded: redo it.
+				ru.mem.attempted = false
+			}
+			return ctrl.Result{RequeueAfter: staleRetry}, nil
+		}
+		if err != nil {
 			return ctrl.Result{}, fmt.Errorf("updating status of SCNodePool %s: %w", pool.Name, err)
 		}
 	}

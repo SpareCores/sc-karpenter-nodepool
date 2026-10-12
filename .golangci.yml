@@ -1,6 +1,10 @@
 version: "2"
 run:
   allow-parallel-runners: true
+  # The L3 and L2 lanes (test/kwok/e2e, test/crd).
+  build-tags:
+    - kwok
+    - crd
 linters:
   default: none
   enable:

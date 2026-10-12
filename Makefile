@@ -21,21 +21,27 @@ help: ## Display this help.
 
 # allowDangerousTypes: score, GiB, GHz and similar selector fields are float64
 # (see api/v1alpha1/scnodepool_types.go).
+# The paths are listed (not ./...): the lanes under test/ keep clones of other
+# projects in their git-ignored caches, whose markers must not be picked up.
+GEN_PATHS = {./api/...,./cmd/...,./internal/...}
+
 .PHONY: manifests
 manifests: ## Generate the CRD and RBAC manifests.
-	controller-gen rbac:roleName=manager-role crd:allowDangerousTypes=true paths="./..." output:crd:artifacts:config=config/crd/bases
+	controller-gen rbac:roleName=manager-role crd:allowDangerousTypes=true paths="$(GEN_PATHS)" output:crd:artifacts:config=config/crd/bases
 
 .PHONY: generate
 generate: ## Generate DeepCopy implementations.
-	controller-gen object:headerFile=hack/boilerplate.go.txt paths="./..."
+	controller-gen object:headerFile=hack/boilerplate.go.txt paths="$(GEN_PATHS)"
 
 .PHONY: fmt
 fmt: ## Run go fmt against code.
 	go fmt ./...
 
+# kwok and crd are the build tags of the L3 and L2 lanes (test/kwok/e2e,
+# test/crd): `make test` leaves them out, vet and lint check them.
 .PHONY: vet
 vet: ## Run go vet against code.
-	go vet ./...
+	go vet -tags kwok,crd ./...
 
 .PHONY: lint
 lint: vet ## Run go vet and golangci-lint.
@@ -49,6 +55,31 @@ lint-fix: ## Run golangci-lint and apply fixes.
 test: ## Run unit and envtest suites (needs KUBEBUILDER_ASSETS, set in the dev container).
 	@test -n "$$KUBEBUILDER_ASSETS" || { echo "KUBEBUILDER_ASSETS is not set; run via hack/dev.sh" >&2; exit 1; }
 	go test ./... -coverprofile cover.out
+
+##@ Test lanes
+
+# These lanes create a kind cluster and need the dev container (docker socket,
+# network): hack/dev.sh make test-crd
+
+.PHONY: test-crd
+test-crd: ## L2: every provider's NodePool CRD against the generated NodePools (kind, server-side dry-run).
+	@test -n "$$SCKN_DEV_CONTAINER" || { echo "run via hack/dev.sh" >&2; exit 1; }
+	test/crd/run.sh
+
+# One of the core Karpenter versions of test/kwok/core-versions.txt.
+KWOK_CORE_VERSION ?= v1.14
+
+.PHONY: test-kwok
+test-kwok: ## L3: real core Karpenter (KWOK provider) in kind, for KWOK_CORE_VERSION (default v1.14).
+	@test -n "$$SCKN_DEV_CONTAINER" || { echo "run via hack/dev.sh" >&2; exit 1; }
+	KWOK_CORE_VERSION=$(KWOK_CORE_VERSION) test/kwok/run.sh
+
+.PHONY: test-kwok-matrix
+test-kwok-matrix: ## L3 for every core version of test/kwok/core-versions.txt, one after the other.
+	@test -n "$$SCKN_DEV_CONTAINER" || { echo "run via hack/dev.sh" >&2; exit 1; }
+	@for v in $$(awk '!/^#/ && NF {print $$1}' test/kwok/core-versions.txt); do \
+		KWOK_CORE_VERSION=$$v test/kwok/run.sh || exit 1; \
+	done
 
 ##@ Build
 

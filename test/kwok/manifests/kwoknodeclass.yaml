@@ -1,0 +1,6 @@
+# The only NodeClass KWOK serves; the controller's test-mode override points
+# every generated NodePool at it.
+apiVersion: karpenter.kwok.sh/v1alpha1
+kind: KWOKNodeClass
+metadata:
+  name: default

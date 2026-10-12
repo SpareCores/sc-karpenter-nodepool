@@ -1,0 +1,11 @@
+# Chart values of the KWOK provider (kwok/charts of kubernetes-sigs/karpenter).
+# Short batching windows keep the scenarios fast. Feature gates: only those the
+# chart of this core version renders; the chart reads each of them from values,
+# and a gate missing from values.yaml renders as an empty string (and crashes
+# the controller on core HEAD, overview §8.2), so every gate is set explicitly.
+settings:
+  batchMaxDuration: 5s
+  batchIdleDuration: 500ms
+  featureGates:
+    spotToSpotConsolidation: false
+logLevel: debug

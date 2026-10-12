@@ -16,3 +16,8 @@ go.work
 
 # Kubeconfigs may contain secrets
 *.kubeconfig
+
+# Local test lanes (plan 05): downloads, built binaries and run output
+test/crd/.cache/
+test/kwok/.cache/
+test/kwok/.out/

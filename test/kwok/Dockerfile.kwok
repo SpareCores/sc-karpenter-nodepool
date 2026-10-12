@@ -1,0 +1,9 @@
+# Core Karpenter's KWOK provider with the generated instance-type catalogs
+# baked in (a ConfigMap cannot hold them: AWS alone is ~4 MB, the limit 1 MiB).
+# The build context is assembled by run.sh: the kwok binary and catalogs/.
+FROM scratch
+COPY kwok /kwok
+COPY catalogs /catalogs
+# The chart runs the container as 65536.
+USER 65536:65536
+ENTRYPOINT ["/kwok"]

@@ -1006,7 +1006,7 @@ prices months old; Hetzner memory stored as GB × 1000.
 |---|---|---|---|---|
 | L1 | Unit and golden tests of the selector engine and adapters | every PR | selection, ranking, churn, requirement building, label-value sanitising, per-adapter key and capacity rules, against the committed SC snapshot replayed through a fake Keeper | seconds |
 | L2 | CRD admission matrix | every PR | every generated NodePool is admitted by each provider's own pinned NodePool CRD (server-side dry-run in one kind cluster) | < 1 min |
-| L3 | KWOK e2e with real core Karpenter | every PR | real scheduling, provisioning, drift and the drift-loop detector against per-vendor catalogs built from the committed SC snapshot, for each core version providers pin (v1.2, v1.8, v1.12, v1.14) | ~3–4 min per core version (8 vendors), versions as parallel jobs |
+| L3 | KWOK e2e with real core Karpenter | every PR | real scheduling, provisioning, drift and the drift-loop detector against per-vendor catalogs built from the committed SC snapshot, for each core version providers pin (v1.2, v1.8, v1.12, v1.14) | ~10–11 min per core version (8 vendors; measured), versions as parallel jobs |
 | L4 | In-process provider tests (AWS, Azure) | nightly (follow-up plan) | real provider instance-type filtering and NodeClaim label stamping against our NodePools | 2–5 min |
 | L5 | Real AWS e2e (EKS Auto Mode + EKS with Karpenter) | manual | everything, on the real cloud | ~60 min, ≈ $0.6–0.8 |
 
@@ -1044,6 +1044,13 @@ nodes (kwok-controller), driven by an instance-type catalog file.
   well-known must be verified when the lane is built.
 - KWOK only manages `karpenter.kwok.sh/KWOKNodeClass` NodePools, so the
   controller runs with the test-mode `nodeClassRef` override (F12).
+- Findings from building the lane (plan 05): catalogs are baked into the
+  KWOK image rather than a ConfigMap (the AWS catalog is ~3.7 MB, over the
+  1 MiB ConfigMap limit); core v1.2's KWOK provider does **not** register
+  offering keys as well-known (v1.8 and later do), so v1.2 catalogs carry only
+  zone, capacity type and region; the drift-loop and custom-key scenarios run
+  once per core version on a vendor whose catalog stamps no region
+  (Hetzner).
 - Verified scenarios: subset honoured (NodeClaims in 2–3 s, all types, zones,
   capacity types and arch from the allowed set); narrowing → `RequirementsDrifted`
   in 3 s, converged in ~22 s; unknown type names → pods Pending, NodePool still

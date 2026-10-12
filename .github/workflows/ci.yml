@@ -23,24 +23,7 @@ jobs:
         with:
           persist-credentials: false
 
-      - uses: docker/setup-buildx-action@v4
-
-      # hack/dev.sh looks for an image tagged with the hash of the Dockerfile;
-      # build exactly that tag here (with a GitHub Actions layer cache) so the
-      # script finds it and does not rebuild.
-      - name: Compute dev image tag
-        id: dev-image
-        run: echo "tag=sc-karpenter-nodepool-dev:$(sha256sum hack/devcontainer/Dockerfile | cut -c1-12)" >> "$GITHUB_OUTPUT"
-
-      - name: Build dev image
-        uses: docker/build-push-action@v7
-        with:
-          context: hack/devcontainer
-          file: hack/devcontainer/Dockerfile
-          tags: ${{ steps.dev-image.outputs.tag }}
-          load: true
-          cache-from: type=gha
-          cache-to: type=gha,mode=max
+      - uses: ./.github/actions/dev-image
 
       - name: Generated code and CRDs are up to date
         run: |
@@ -55,4 +38,54 @@ jobs:
         run: hack/dev.sh make test
 
       - name: Lint workflows and scripts
-        run: hack/dev.sh bash -c 'actionlint && shellcheck hack/*.sh'
+        run: hack/dev.sh bash -c 'actionlint && shellcheck -x hack/*.sh test/*.sh test/*/*.sh'
+
+  # L2: every provider's NodePool CRD against the golden NodePools and the
+  # negative cases (overview §8.3).
+  crd:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          persist-credentials: false
+
+      - uses: ./.github/actions/dev-image
+
+      - name: CRD admission matrix
+        run: hack/dev.sh make test-crd
+
+      - name: Upload the log
+        if: failure()
+        uses: actions/upload-artifact@v7
+        with:
+          name: test-crd
+          path: test/crd/.out/
+          if-no-files-found: ignore
+
+  # L3: real core Karpenter (KWOK provider) in kind, once per core version the
+  # supported providers pin (overview §8.2).
+  kwok:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    strategy:
+      fail-fast: false
+      matrix:
+        core: [v1.2, v1.8, v1.12, v1.14]
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          persist-credentials: false
+
+      - uses: ./.github/actions/dev-image
+
+      - name: KWOK e2e (core ${{ matrix.core }})
+        run: hack/dev.sh make test-kwok KWOK_CORE_VERSION=${{ matrix.core }}
+
+      - name: Upload logs and catalogs
+        if: failure()
+        uses: actions/upload-artifact@v7
+        with:
+          name: test-kwok-${{ matrix.core }}
+          path: test/kwok/.out/${{ matrix.core }}/
+          if-no-files-found: ignore

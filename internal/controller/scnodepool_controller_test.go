@@ -647,3 +647,62 @@ func TestDiffMessage(t *testing.T) {
 		t.Errorf("got %q", got)
 	}
 }
+
+// staleReader serves a fixed, older copy of the SCNodePool, like an informer
+// cache that has not yet seen the controller's own previous status write.
+type staleReader struct {
+	client.Client
+	stale *v1alpha1.SCNodePool
+}
+
+func (c staleReader) Get(ctx context.Context, key client.ObjectKey, obj client.Object, opts ...client.GetOption) error {
+	if p, ok := obj.(*v1alpha1.SCNodePool); ok && c.stale != nil {
+		c.stale.DeepCopyInto(p)
+		return nil
+	}
+	return c.Client.Get(ctx, key, obj, opts...)
+}
+
+// TestStaleCacheKeepsConditions: a reconcile that read the SCNodePool from a
+// lagging cache must not write its status over the newer one (a merge patch
+// replaces the whole conditions list); it is retried instead, and a refresh
+// whose result was lost is repeated.
+func TestStaleCacheKeepsConditions(t *testing.T) {
+	createNodeClass(t, "nc-stale-cache", "use1-az1")
+	createPool(t, newPool("stale-cache", "nc-stale-cache", familiesSelector(2, 4)))
+	stale := getPool(t, "stale-cache")
+
+	r, _ := newReconciler()
+	reconcileOnce(t, r, "stale-cache")
+	want := getPool(t, "stale-cache")
+	expectCondition(t, want, v1alpha1.ConditionNodePoolSynced, metav1.ConditionTrue, "Applied")
+
+	// Same memory, stale read: nothing is due, only the health conditions
+	// would be rewritten.
+	r.Client = staleReader{Client: k8sClient, stale: stale}
+	if res := reconcileOnce(t, r, "stale-cache"); res.RequeueAfter != staleRetry {
+		t.Errorf("a conflicting status write must be retried: %+v", res)
+	}
+	got := getPool(t, "stale-cache")
+	if len(got.Status.Conditions) != len(want.Status.Conditions) {
+		t.Errorf("conditions changed from %d to %d: %v", len(want.Status.Conditions), len(got.Status.Conditions), got.Status.Conditions)
+	}
+	expectCondition(t, got, v1alpha1.ConditionNodePoolSynced, metav1.ConditionTrue, "Applied")
+
+	// Fresh memory, stale read: the refresh runs, its status is rejected, and
+	// the next (fresh) reconcile refreshes again.
+	r2, _ := newReconciler()
+	r2.Client = staleReader{Client: k8sClient, stale: stale}
+	if res := reconcileOnce(t, r2, "stale-cache"); res.RequeueAfter != staleRetry {
+		t.Errorf("a conflicting status write must be retried: %+v", res)
+	}
+	if m := r2.memoryOf("stale-cache"); m.attempted {
+		t.Error("the refresh whose status was lost counts as done")
+	}
+	r2.Client = k8sClient
+	reconcileOnce(t, r2, "stale-cache")
+	if !r2.memoryOf("stale-cache").attempted {
+		t.Error("the refresh was not repeated")
+	}
+	expectCondition(t, getPool(t, "stale-cache"), v1alpha1.ConditionNodePoolSynced, metav1.ConditionTrue, "Applied")
+}

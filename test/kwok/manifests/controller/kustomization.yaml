@@ -1,0 +1,33 @@
+# The controller exactly as config/default ships it (RBAC, CRD, Deployment),
+# configured for the KWOK lane: test-mode nodeClassRef override, Keeper and
+# price list replaced by the replay server, scheduling onto the tainted node.
+resources:
+  - ../../../../config/default
+patches:
+  - target:
+      kind: Deployment
+      name: sc-karpenter-nodepool-controller-manager
+    patch: |-
+      apiVersion: apps/v1
+      kind: Deployment
+      metadata:
+        name: sc-karpenter-nodepool-controller-manager
+      spec:
+        template:
+          spec:
+            tolerations:
+              - {key: CriticalAddonsOnly, operator: Exists}
+            containers:
+              - name: manager
+                image: controller:latest
+                args:
+                  - --metrics-bind-address=:8443
+                  - --leader-elect
+                  - --health-probe-bind-address=:8081
+                  - --node-class-ref-override=karpenter.kwok.sh/KWOKNodeClass/default
+                  - --keeper-url=http://keeper-replay:8080
+                  - --aws-price-list-url=http://keeper-replay:8080
+                  - --zap-log-level=debug
+                resources:
+                  limits: {cpu: "2", memory: 1Gi}
+                  requests: {cpu: 100m, memory: 256Mi}

@@ -48,7 +48,17 @@ if [[ -S /var/run/docker.sock ]]; then
   sock_args=(-v /var/run/docker.sock:/var/run/docker.sock --group-add "$(stat -c %g /var/run/docker.sock)")
 fi
 
+# Settings of the local test lanes (test/crd/run.sh, test/kwok/run.sh) that
+# pass through when set in the caller's environment.
+env_args=()
+for name in KWOK_CORE_VERSION KWOK_VENDORS KEEP_CLUSTER REUSE_CLUSTER KIND_CLUSTER_NAME; do
+  if [[ -n "${!name:-}" ]]; then
+    env_args+=(-e "${name}=${!name}")
+  fi
+done
+
 exec docker run --rm "${tty_flags[@]}" \
+  "${env_args[@]}" \
   -u "$(id -u):$(id -g)" \
   --network host \
   "${sock_args[@]}" \

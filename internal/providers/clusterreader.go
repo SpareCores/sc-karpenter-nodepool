@@ -32,7 +32,12 @@ type ClientReader struct {
 var _ ClusterReader = ClientReader{}
 
 // NodeClass gets the NodeClass; a missing object (or a missing CRD) is nil.
+// An empty ref.Version means the CRD is not installed (no served version was
+// found), which cannot be read.
 func (r ClientReader) NodeClass(ctx context.Context, ref NodeClassRef) (*unstructured.Unstructured, error) {
+	if ref.Version == "" {
+		return nil, nil
+	}
 	u := &unstructured.Unstructured{}
 	u.SetGroupVersionKind(ref.GroupVersionKind())
 	err := r.Client.Get(ctx, client.ObjectKey{Name: ref.Name}, u)

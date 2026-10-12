@@ -1,0 +1,24 @@
+# Stand-in for the kubekanvas UpCloudNodeClass CRD. The UpCloud adapter only
+# matches a NodeClass CRD whose served version is v1alpha1 (the unsupported
+# upcloud-tools provider serves v1alpha2 under the same group); with no CRD at
+# all the version is unknown and detection fails.
+apiVersion: apiextensions.k8s.io/v1
+kind: CustomResourceDefinition
+metadata:
+  name: upcloudnodeclasses.karpenter.k8s.upcloud
+spec:
+  group: karpenter.k8s.upcloud
+  names:
+    kind: UpCloudNodeClass
+    listKind: UpCloudNodeClassList
+    plural: upcloudnodeclasses
+    singular: upcloudnodeclass
+  scope: Cluster
+  versions:
+    - name: v1alpha1
+      served: true
+      storage: true
+      schema:
+        openAPIV3Schema:
+          type: object
+          x-kubernetes-preserve-unknown-fields: true

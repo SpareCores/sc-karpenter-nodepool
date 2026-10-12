@@ -1,0 +1,92 @@
+# L2 (docs/plans/v1/wip/00-overview.md §8.3): the NodePool CRD every supported
+# Karpenter provider ships, pinned by release. Each CRD is installed into one
+# kind cluster in turn; the golden NodePools of internal/nodepool/testdata/golden
+# and the negative cases of crd_test.go are applied with a server-side dry-run.
+#
+#   name       provider (the name of the sub-test)
+#   tag        release (or commit) the CRD is taken from
+#   url        the CRD file at that release; Vultr and OVH ship none, so
+#              core's CRD of the version they pin is used
+#   goldens    golden NodePools (internal/nodepool/testdata/golden/<name>.yaml)
+#              of the provider's adapter; they must be admitted, and the first
+#              is the base of the negative cases
+#   overrides  negative cases whose outcome differs from the default of
+#              crd_test.go (accept or reject), with the reason
+#
+# Downloads are cached in test/crd/.cache/. CRDs under test/crd/fixtures/<dir>/
+# karpenter.sh_nodepools.yaml (EKS Auto Mode, which publishes none) are picked
+# up as well; list them under `fixtures` to give them goldens and overrides.
+providers:
+  - name: aws
+    tag: v1.14.1
+    url: https://raw.githubusercontent.com/aws/karpenter-provider-aws/v1.14.1/pkg/apis/crds/karpenter.sh_nodepools.yaml
+    goldens: [aws]
+    overrides:
+      aws-domain: reject
+
+  - name: azure
+    tag: v1.14.3
+    url: https://raw.githubusercontent.com/Azure/karpenter-provider-azure/v1.14.3/pkg/apis/crds/karpenter.sh_nodepools.yaml
+    goldens: [azure]
+    overrides:
+      azure-domain: reject
+
+  - name: gcp-cloudpilot
+    tag: v0.6.1
+    url: https://raw.githubusercontent.com/cloudpilot-ai/karpenter-provider-gcp/v0.6.1/charts/karpenter/crds/karpenter.sh_nodepools.yaml
+    goldens: [gcp]
+
+  - name: alicloud-official
+    tag: v0.2.5
+    url: https://raw.githubusercontent.com/AliyunContainerService/karpenter-provider-alibabacloud/v0.2.5/pkg/apis/crds/karpenter.sh_nodepools.yaml
+    goldens: [alicloud-ack]
+    overrides:
+      # Core v1.8; it carries AWS's karpenter.k8s.aws rule (copy-paste, §5.4).
+      aws-domain: reject
+
+  - name: alicloud-cloudpilot
+    tag: v0.2.2
+    url: https://raw.githubusercontent.com/cloudpilot-ai/karpenter-provider-alibabacloud/v0.2.2/charts/karpenter/crds/karpenter.sh_nodepools.yaml
+    goldens: [alicloud-cloudpilot]
+    overrides:
+      # Core v1.2: the oldest CRD does not reject these (overview §5.1.3).
+      restricted-hostname: accept
+      restricted-karpenter-domain: accept
+
+  - name: hcloud-stubbi
+    tag: v3.0.1
+    url: https://raw.githubusercontent.com/stubbi/karpenter-provider-hetzner/v3.0.1/charts/karpenter-provider-hetzner/crds/karpenter.sh_nodepools.yaml
+    goldens: [hcloud]
+
+  - name: hcloud-echohello
+    tag: v2026.9.2
+    url: https://raw.githubusercontent.com/echohello-dev/karpenter-provider-hetzner/v2026.9.2/charts/karpenter-provider-hetzner/crds/karpenter.sh_nodepools.yaml
+    goldens: [hcloud]
+
+  - name: hcloud-itsh
+    tag: v0.2.0
+    url: https://raw.githubusercontent.com/itsh-cloud/karpenter-provider-hcloud/v0.2.0/config/crd/karpenter.sh_nodepools.yaml
+    goldens: [hcloud-itsh]
+
+  - name: upcloud-kubekanvas
+    tag: v0.1.1
+    url: https://raw.githubusercontent.com/kubekanvas/karpenter-provider-upcloud/v0.1.1/pkg/apis/crds/karpenter.sh_nodepools.yaml
+    goldens: [upcloud]
+
+  - name: ovh-core-v1.8.2
+    tag: kubernetes-sigs/karpenter v1.8.2 (the core version the provider pins; it ships no CRD)
+    url: https://raw.githubusercontent.com/kubernetes-sigs/karpenter/v1.8.2/pkg/apis/crds/karpenter.sh_nodepools.yaml
+    goldens: [ovh]
+
+  - name: vultr-core-v1.12.1
+    tag: kubernetes-sigs/karpenter v1.12.1 (the core version the provider pins; it ships no CRD)
+    url: https://raw.githubusercontent.com/kubernetes-sigs/karpenter/v1.12.1/pkg/apis/crds/karpenter.sh_nodepools.yaml
+    goldens: [vultr]
+
+fixtures:
+  # Extracted from a live EKS Auto Mode cluster (schema only, overview §8.3).
+  - name: eks-auto-mode
+    goldens: [aws-auto]
+    overrides:
+      aws-domain: reject
+      eks-domain: reject

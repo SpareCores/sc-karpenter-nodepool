@@ -1,0 +1,15 @@
+# Karpenter core versions of the L3 matrix. Columns:
+#   minor         the line (the lane, the values file and the CI job name)
+#   tag           the tag the KWOK provider is built from (latest patch)
+#   offeringKeys  registered: the KWOK provider registers the keys of the
+#                 catalog's offering requirements as well-known (core v1.8+),
+#                 so catalogs may carry the provider's own label keys;
+#                 ignored: it does not (v1.2), and core then finds every type
+#                 incompatible that has an offering on such a key
+# Overview §8.2: these are the core versions the supported providers pin (v1.2
+# cloudpilot Alibaba, v1.8 official Alibaba and OVH, v1.12 Vultr, v1.14 AWS,
+# Azure, GCP, Hetzner, UpCloud).
+v1.2   v1.2.5   ignored
+v1.8   v1.8.3   registered
+v1.12  v1.12.1  registered
+v1.14  v1.14.1  registered
