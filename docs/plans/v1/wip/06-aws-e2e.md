@@ -35,7 +35,10 @@ real values of these into the repository; reference the variables.
   else the kustomize manifests), `test-select.sh`, `test-drift.sh`,
   `dump-diagnostics.sh`, `teardown.sh`, `preflight-cleanup.sh`, and an
   `SCNodePool` that yields a small known Graviton/t4g set valid on Auto Mode.
-- `.github/workflows/e2e-aws-sweeper.yml`: every 3 hours + manual; deletes
+- `.github/workflows/e2e-aws-sweeper.yml`: **`workflow_dispatch` only for now**
+  (the 3-hourly `schedule` trigger is included but commented out, with a note
+  that the maintainer enables it; nothing may call AWS automatically before
+  that); deletes
   `sckn-ci-*` clusters older than 3 hours and orphans (instances tagged
   `eks:eks-cluster-name=sckn-ci-*`, Auto Mode instances via
   `--include-managed-resources`, launch templates, `sckn-ci-*` instance
@@ -44,7 +47,8 @@ real values of these into the repository; reference the variables.
 
 ## Gates
 
-`actionlint` on both workflows, `shellcheck test/e2e-aws/*.sh`,
-`eksctl create cluster --dry-run -f <rendered config>` for both configs with
-placeholder values (inside the dev container, no AWS credentials), CONVENTIONS
-gates 1–3 unchanged.
+`actionlint` on both workflows, `shellcheck test/e2e-aws/*.sh`, schema
+validation of the rendered eksctl configs with placeholder values done
+offline (for example against eksctl's published JSON schema; no eksctl
+command that may call AWS), CONVENTIONS gates 1–3 unchanged. Never run
+anything against AWS (CONVENTIONS rule 8).

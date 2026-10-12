@@ -25,6 +25,11 @@ fully before starting. Every plan assumes you did.
    committed snapshot (`test/data/sc-snapshot/`) or is synthetic.
 7. **Run everything in the dev container** (below). Do not install tools on
    the host. The host only needs Docker.
+8. **Never touch live systems**: no AWS calls (CLI, SDK, eksctl, including
+   read-only and dry-run calls that reach AWS), no kubectl or Helm against any
+   cluster other than local kind clusters you created, no Pulumi, no
+   triggering of workflows that use cloud credentials. Local kind/KWOK
+   clusters are fine.
 
 ## Orientation (read in this order)
 
