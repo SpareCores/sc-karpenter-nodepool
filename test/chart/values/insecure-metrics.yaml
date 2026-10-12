@@ -1,0 +1,7 @@
+# Plain-HTTP metrics: no authn/authz RBAC, a ServiceMonitor without TLS.
+metrics:
+  secure: false
+serviceMonitor:
+  enabled: true
+crds:
+  install: false

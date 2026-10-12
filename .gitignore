@@ -21,3 +21,6 @@ go.work
 test/crd/.cache/
 test/kwok/.cache/
 test/kwok/.out/
+
+# lane outputs (logs, generated catalogs)
+.out/

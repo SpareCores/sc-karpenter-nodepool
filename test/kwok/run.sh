@@ -7,6 +7,8 @@
 #                      or a full tag listed in core-versions.txt
 #   KWOK_VENDORS       comma-separated vendors to run (default: all)
 #   KEEP_CLUSTER=1     keep the kind cluster (and reuse it with REUSE_CLUSTER=1)
+#   KWOK_SETUP_ONLY=1  stop once the cluster, Karpenter and the controller run, and
+#                      keep the cluster (make kwok-up; docs/tutorials/kind-quickstart.md)
 #   KIND_CLUSTER_NAME  cluster name (default sckn-kwok)
 #
 # Logs, catalogs and test output land in test/kwok/.out/<minor>/.
@@ -28,6 +30,10 @@ done <"${here}/core-versions.txt"
 if [[ -z "${minor}" ]]; then
   echo "unknown KWOK_CORE_VERSION ${want}; see test/kwok/core-versions.txt" >&2
   exit 2
+fi
+
+if [[ "${KWOK_SETUP_ONLY:-}" == "1" ]]; then
+  export KEEP_CLUSTER=1
 fi
 
 cache="${here}/.cache"
@@ -76,6 +82,10 @@ cleanup() {
     kind_down "${cluster}" "${cache}"
     docker rmi -f "${kwok_image}" "${manager_image}" "${replay_image}" >/dev/null 2>&1 || true
     rm -f "${KUBECONFIG}"
+  fi
+  if [[ "${KWOK_SETUP_ONLY:-}" == "1" && "${status}" -eq 0 ]]; then
+    printf '\ncluster %s is up (core %s) after %ss\nkubeconfig: %s\n' "${cluster}" "${core}" "$(($(date +%s) - start))" "${KUBECONFIG#"${root}/"}"
+    return
   fi
   printf '\nL3 core %s (%s): %s after %ss\n' "${minor}" "${core}" "$([[ "${status}" -eq 0 ]] && echo PASS || echo FAIL)" "$(($(date +%s) - start))"
 }
@@ -172,6 +182,10 @@ kubectl apply -f "${here}/manifests/keeper-replay.yaml"
 kubectl -n sc-karpenter-nodepool-system rollout status deployment/keeper-replay --timeout=120s
 kubectl -n sc-karpenter-nodepool-system rollout status deployment/sc-karpenter-nodepool-controller-manager --timeout=120s
 phase
+
+if [[ "${KWOK_SETUP_ONLY:-}" == "1" ]]; then
+  exit 0
+fi
 
 # ----------------------------------------------------------------- tests ----
 log "running the scenarios"

@@ -31,7 +31,7 @@ Execution protocol:
 | 04 | `done/04-controller.md` | done | reconcile, NodePool render/validate/apply, status, health, metrics | 03 |
 | 05 | `done/05-local-test-lanes.md` | done | L2 CRD admission matrix + L3 KWOK e2e (core version matrix) in CI | 04 |
 | 06 | `wip/06-aws-e2e.md` | todo | L5 AWS e2e workflow + sweeper (written and validated, not run) | 05 |
-| 07 | `wip/07-packaging.md` | todo | Helm chart, release workflow, how-to guides, tutorial | 04 |
+| 07 | `done/07-packaging.md` | done | Helm chart, release workflow, how-to guides, tutorial | 04 |
 | 08 | `wip/08-provider-inprocess-tests.md` | todo | L4 in-process AWS/Azure provider tests | 04 |
 
 Shared rules for every plan: [`CONVENTIONS.md`](CONVENTIONS.md).

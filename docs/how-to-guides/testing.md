@@ -1,0 +1,127 @@
+# Test and develop
+
+Everything runs in the dev container, so the only tool you need on your machine
+is Docker. This guide covers the container, the gates every change must pass,
+the test lanes, and refreshing the test data. The strategy behind the lanes is in
+the [v1 overview](../plans/v1/wip/00-overview.md#8-testing).
+
+## The dev container
+
+`hack/devcontainer/Dockerfile` pins every tool: Go, controller-gen, envtest
+(kube-apiserver and etcd binaries), golangci-lint, kind, kubectl, helm, python3,
+actionlint, shellcheck, yq and jq. `hack/dev.sh <command...>` builds the image on
+first use (and again when the Dockerfile changes) and runs the command in it as
+you, with the repository at `/src`, a named volume for Go caches, host networking
+and the Docker socket (kind needs it):
+
+```bash
+hack/dev.sh make test
+hack/dev.sh go test ./internal/selection/...
+hack/dev.sh bash                      # a shell in the container
+```
+
+Never install the tools on the host; versions are bumped in the Dockerfile only.
+Settings of the lanes pass through from your environment when set:
+`KWOK_CORE_VERSION`, `KWOK_VENDORS`, `KWOK_SETUP_ONLY`, `KEEP_CLUSTER`,
+`REUSE_CLUSTER`, `KIND_CLUSTER_NAME`. `make help` lists all targets.
+
+## The gates
+
+Run in this order before you propose a change; CI (`.github/workflows/ci.yml`)
+runs the same:
+
+| # | Command | What it checks |
+|---|---|---|
+| 1 | `hack/dev.sh make generate manifests chart-crds chart-rbac docs-api` | Generated code, the CRD, RBAC, the chart copies of CRD and RBAC and `docs/reference/api.md` are up to date: afterwards `git status` shows no change you did not make. |
+| 2 | `hack/dev.sh make lint` | `go vet` (also of the lane code) and golangci-lint. |
+| 3 | `hack/dev.sh make test` | Unit tests and the envtest suites (a real kube-apiserver and etcd, no cluster); no network access: Keeper calls go to the snapshot replay server. |
+| 4 | `hack/dev.sh make test-crd` | L2: every provider's NodePool CRD against the generated NodePools. |
+| 5 | `hack/dev.sh make test-kwok` | L3: real core Karpenter in kind. |
+| 6 | `hack/dev.sh make test-chart` | Helm chart: `helm lint --strict`, the values schema, golden `helm template` output, the chart's CRD and RBAC equal to `config/`, every manager flag settable from the chart. |
+| 7 | `hack/dev.sh make test-docs` | Relative links and anchors of all Markdown files resolve. |
+| 8 | `hack/dev.sh bash -c 'actionlint && shellcheck -x hack/*.sh test/*.sh test/*/*.sh'` | Workflows and shell scripts. |
+
+Tests are table-driven and sit next to the code; large outputs are golden files
+under `testdata/` (`go test ./internal/nodepool -update` rewrites the NodePool
+goldens, `hack/dev.sh make test-chart UPDATE=1` the chart goldens: review the
+diff before you keep it).
+
+## The test layers
+
+| Layer | Command | Runs | What it proves |
+|---|---|---|---|
+| L1 unit and envtest | `make test` | every PR | Selection, ranking, churn, requirement building, adapters and the reconciler, against the committed Spare Cores snapshot replayed through a fake Keeper. |
+| L2 CRD matrix | `make test-crd` | every PR | Server-side dry-run of the generated NodePools (and negative cases) against the NodePool CRD each supported provider ships, one kind cluster, under a minute plus downloads. Logs in `test/crd/.out/`. |
+| L3 KWOK | `make test-kwok` | every PR, once per core version | Real scheduling, provisioning, drift and the drift-loop detector with core Karpenter's KWOK provider and per-vendor catalogs built from the snapshot, in kind. About 10 minutes per core version. Logs and catalogs in `test/kwok/.out/<version>/`. |
+| L4 provider tests | not yet | | AWS and Azure in-process provider tests (planned). |
+| L5 real AWS | manual (planned) | | EKS Auto Mode and EKS with Karpenter on a real account (planned). |
+
+### L3 in detail
+
+```bash
+hack/dev.sh make test-kwok                       # core v1.14
+hack/dev.sh make test-kwok KWOK_CORE_VERSION=v1.8
+hack/dev.sh make test-kwok-matrix                # v1.2, v1.8, v1.12, v1.14 in turn
+KWOK_VENDORS=aws,hcloud hack/dev.sh make test-kwok
+KEEP_CLUSTER=1 hack/dev.sh make test-kwok        # keep the cluster for poking around
+```
+
+The lane builds the controller, a KWOK build of the chosen core Karpenter tag
+(cloned into `test/kwok/.cache/`) and the Keeper replay server, creates a kind
+cluster, deploys the controller through the kustomize manifests of
+`config/default` (with the test-mode `--node-class-ref-override`), and runs
+`test/kwok/e2e`. The core versions are listed in `test/kwok/core-versions.txt`.
+Downloads and builds are cached in `test/kwok/.cache/` (git-ignored).
+
+`make kwok-up` runs the same set-up and stops with a working cluster, which
+the [kind quickstart](../tutorials/kind-quickstart.md) uses; `make kwok-down` deletes
+it. For debugging a failing scenario, `KEEP_CLUSTER=1` plus
+`kubectl --kubeconfig test/kwok/.cache/sckn-kwok.kubeconfig` (inside
+`hack/dev.sh`) is the quickest way in; `REUSE_CLUSTER=1` reuses it on the next run.
+
+On hosts whose Docker root is on ZFS, kubelet cannot start in a kind node; the
+lanes detect that and mount the node's data directories from tmpfs.
+
+## Develop and try changes
+
+```bash
+hack/dev.sh make build                 # bin/manager
+hack/dev.sh make docker-build          # image ghcr.io/sparecores/sc-karpenter-nodepool:dev
+hack/dev.sh make kwok-up               # a cluster with your checkout running
+```
+
+To lint and render the chart while you edit it:
+`hack/dev.sh helm lint charts/sc-karpenter-nodepool` and
+`hack/dev.sh helm template x charts/sc-karpenter-nodepool`. The chart's CRD and
+RBAC rules are copies: change the Go markers, run `make manifests chart-crds
+chart-rbac`, never edit `templates/crd.yaml` or `files/manager-rules.yaml`.
+`docs/reference/api.md` is generated from the CRD (`make docs-api`).
+
+## Refresh the Spare Cores snapshot
+
+All lanes read `test/data/sc-snapshot/`, a fixed set of raw Keeper responses
+(`manifest.json` records what, when and from which Keeper database). It changes
+only on purpose:
+
+- on GitHub: run the workflow **Refresh Spare Cores snapshot** (Actions, manual
+  trigger). It runs `hack/sc-snapshot/fetch.py`, replaces the directory, and
+  commits it to the branch it ran on if any data changed;
+- locally: `hack/dev.sh python3 hack/sc-snapshot/fetch.py --out test/data/sc-snapshot`
+  (needs network access to Keeper and the AWS price list).
+
+After a refresh, run the gates again: golden files and the numbers in the docs
+(the recipes in [write an SCNodePool](write-an-scnodepool.md), the
+[tutorial](../tutorials/kind-quickstart.md)) are derived from the snapshot and may
+change.
+
+## Release
+
+A tag `v<major>.<minor>.<patch>[-<prerelease>]` triggers
+`.github/workflows/release.yml`: it re-runs the gates, builds the multi-arch
+(amd64, arm64) image to `ghcr.io/sparecores/sc-karpenter-nodepool`, packages the
+chart with the tag as chart and app version and pushes it to
+`oci://ghcr.io/sparecores/charts`, and creates the GitHub release with generated
+notes. Image tags and chart versions carry no leading `v`. Pre-release tags create
+a pre-release and do not move `latest`. To try the image build locally:
+`hack/dev.sh make docker-buildx IMG=<registry>/<name>:<tag>` pushes a multi-arch
+image to a registry of your choice.

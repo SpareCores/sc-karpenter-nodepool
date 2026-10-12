@@ -139,3 +139,23 @@ from the nodes' labels. Zone pinning is a normal requirement in `nodePoolTemplat
 
 Supersedes the earlier choice of an explicit region list with auto-detection as
 a fallback (2026-10-06): a user-supplied list could only be redundant or wrong.
+
+## ADR-010: Packaging: Helm chart, versions and CRD handling (accepted, 2026-10-13)
+
+- The Helm chart (`charts/sc-karpenter-nodepool`) is the supported install path.
+  Its CRD lives in `templates/` behind `crds.install` with
+  `helm.sh/resource-policy: keep`, not in Helm's `crds/` directory, because
+  `crds/` is never upgraded and the `SCNodePool` API is still `v1alpha1`.
+  `templates/crd.yaml` and the manager's ClusterRole rules are generated copies
+  of `config/` (`make chart-crds chart-rbac`); CI fails on drift.
+- A release tag `v<semver>` publishes the image (linux/amd64 and linux/arm64)
+  to `ghcr.io/sparecores/sc-karpenter-nodepool`, the chart as an OCI artifact to
+  `ghcr.io/sparecores/charts`, and a GitHub release. Image tags and chart
+  version are the tag without the `v`; the chart's `appVersion` is the default
+  image tag.
+- The default scheduling is a soft preference for nodes without the
+  `karpenter.sh/nodepool` label, so the controller avoids the nodes of the pools
+  it generates but still schedules where every node is Karpenter's (EKS Auto
+  Mode).
+- The API reference is generated from the CRD (`make docs-api`) rather than
+  written, so it cannot drift from the types.

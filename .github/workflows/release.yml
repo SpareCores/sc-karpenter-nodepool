@@ -1,0 +1,199 @@
+name: Release
+
+# A tag v<semver> (for example v0.1.0 or v0.2.0-rc.1) publishes
+#   - the manager image ghcr.io/sparecores/sc-karpenter-nodepool:<semver> for
+#     linux/amd64 and linux/arm64,
+#   - the Helm chart as an OCI artifact, oci://ghcr.io/sparecores/charts/sc-karpenter-nodepool,
+#     with the chart version and appVersion set to <semver>,
+#   - a GitHub release with generated notes and the chart package attached.
+# The image tag and the chart version carry no "v". Tags with a pre-release
+# suffix create a pre-release and do not move the "latest" image tag.
+on:
+  push:
+    tags: ["v*"]
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+env:
+  IMAGE: ghcr.io/sparecores/sc-karpenter-nodepool
+  CHART_REPO: oci://ghcr.io/sparecores/charts
+
+jobs:
+  # The same gates as CI, on the tagged commit: nothing is published from a
+  # commit that does not pass them.
+  verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    outputs:
+      version: ${{ steps.version.outputs.version }}
+      prerelease: ${{ steps.version.outputs.prerelease }}
+    steps:
+      - name: Version from the tag
+        id: version
+        env:
+          TAG: ${{ github.ref_name }}
+        run: |
+          if [[ ! "${TAG}" =~ ^v[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.-]+)?$ ]]; then
+            echo "the tag ${TAG} is not v<major>.<minor>.<patch>[-<prerelease>]" >&2
+            exit 1
+          fi
+          echo "version=${TAG#v}" >>"${GITHUB_OUTPUT}"
+          if [[ "${TAG}" == *-* ]]; then
+            echo "prerelease=true" >>"${GITHUB_OUTPUT}"
+          else
+            echo "prerelease=false" >>"${GITHUB_OUTPUT}"
+          fi
+
+      - uses: actions/checkout@v6
+        with:
+          persist-credentials: false
+
+      - uses: ./.github/actions/dev-image
+
+      - name: Generated files are up to date
+        run: |
+          hack/dev.sh make generate manifests chart-crds chart-rbac docs-api
+          git add -N .
+          git diff --exit-code
+
+      - name: Lint
+        run: hack/dev.sh make lint
+
+      - name: Test
+        run: hack/dev.sh make test
+
+      - name: Chart and docs
+        run: hack/dev.sh bash -c 'make test-chart test-docs && actionlint && shellcheck -x hack/*.sh test/*.sh test/*/*.sh'
+
+  image:
+    needs: verify
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          persist-credentials: false
+
+      - uses: docker/setup-buildx-action@v4
+
+      - uses: docker/login-action@v4
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Image tags and labels
+        id: meta
+        uses: docker/metadata-action@v6
+        with:
+          images: ${{ env.IMAGE }}
+          tags: |
+            type=semver,pattern={{version}}
+            type=semver,pattern={{major}}.{{minor}}
+            type=semver,pattern={{major}},enable=${{ !startsWith(github.ref_name, 'v0.') }}
+          # "latest" only for stable releases (the action skips it for pre-releases).
+          flavor: latest=auto
+
+      # The Dockerfile cross-compiles on the build platform, so the arm64 image
+      # needs no emulation.
+      - name: Build and push the multi-arch image
+        id: build
+        uses: docker/build-push-action@v7
+        with:
+          context: .
+          platforms: linux/amd64,linux/arm64
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          provenance: mode=max
+          sbom: true
+
+      - name: Both architectures are in the image
+        env:
+          VERSION: ${{ needs.verify.outputs.version }}
+        run: |
+          docker buildx imagetools inspect "${IMAGE}:${VERSION}" | tee inspect.txt
+          grep -q 'linux/amd64' inspect.txt
+          grep -q 'linux/arm64' inspect.txt
+
+  chart:
+    needs: [verify, image]
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          persist-credentials: false
+
+      - name: Package the chart
+        env:
+          VERSION: ${{ needs.verify.outputs.version }}
+        run: |
+          helm version
+          helm package charts/sc-karpenter-nodepool --version "${VERSION}" --app-version "${VERSION}" --destination dist
+          ls -l dist
+
+      - name: Push the chart
+        env:
+          VERSION: ${{ needs.verify.outputs.version }}
+          GHCR_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GHCR_USER: ${{ github.actor }}
+        run: |
+          echo "${GHCR_TOKEN}" | helm registry login ghcr.io --username "${GHCR_USER}" --password-stdin
+          helm push "dist/sc-karpenter-nodepool-${VERSION}.tgz" "${CHART_REPO}"
+
+      - uses: actions/upload-artifact@v7
+        with:
+          name: chart
+          path: dist/*.tgz
+          if-no-files-found: error
+
+  release:
+    needs: [verify, image, chart]
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v8
+        with:
+          name: chart
+          path: dist
+
+      - name: Create the GitHub release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_REPO: ${{ github.repository }}
+          TAG: ${{ github.ref_name }}
+          VERSION: ${{ needs.verify.outputs.version }}
+          PRERELEASE: ${{ needs.verify.outputs.prerelease }}
+        run: |
+          cat >notes.md <<NOTES
+          ## Install
+
+          \`\`\`bash
+          helm install sc-karpenter-nodepool ${CHART_REPO}/sc-karpenter-nodepool \\
+            --version ${VERSION} --namespace sc-karpenter-nodepool --create-namespace
+          \`\`\`
+
+          Image: \`${IMAGE}:${VERSION}\` (linux/amd64, linux/arm64).
+          The chart is also attached to this release.
+
+          NOTES
+          flags=()
+          if [[ "${PRERELEASE}" == "true" ]]; then
+            flags+=(--prerelease)
+          fi
+          gh release create "${TAG}" "dist/sc-karpenter-nodepool-${VERSION}.tgz" \
+            --title "${TAG}" --verify-tag --notes-file notes.md --generate-notes "${flags[@]}"

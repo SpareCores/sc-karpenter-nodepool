@@ -1,0 +1,105 @@
+---
+# Source: sc-karpenter-nodepool/templates/deployment.yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: sckn
+  namespace: sc-karpenter-nodepool
+  labels:
+    helm.sh/chart: sc-karpenter-nodepool-0.0.0-dev
+    app.kubernetes.io/name: sc-karpenter-nodepool
+    app.kubernetes.io/instance: sckn
+    app.kubernetes.io/version: "dev"
+    app.kubernetes.io/managed-by: Helm
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: sc-karpenter-nodepool
+      app.kubernetes.io/instance: sckn
+  template:
+    metadata:
+      annotations:
+        kubectl.kubernetes.io/default-container: manager
+      labels:
+        helm.sh/chart: sc-karpenter-nodepool-0.0.0-dev
+        app.kubernetes.io/name: sc-karpenter-nodepool
+        app.kubernetes.io/instance: sckn
+        app.kubernetes.io/version: "dev"
+        app.kubernetes.io/managed-by: Helm
+    spec:
+      serviceAccountName: existing-sa
+      automountServiceAccountToken: true
+      securityContext:
+        runAsNonRoot: true
+        seccompProfile:
+          type: RuntimeDefault
+      terminationGracePeriodSeconds: 10
+      containers:
+        - name: manager
+          image: "ghcr.io/sparecores/sc-karpenter-nodepool:dev"
+          imagePullPolicy: IfNotPresent
+          command:
+            - /manager
+          args:
+            - "--leader-elect=false"
+            - "--health-probe-bind-address=:8081"
+            - "--metrics-bind-address=0"
+            - "--metrics-secure=true"
+            - "--enable-http2=false"
+            - "--keeper-url=https://keeper.sparecores.net"
+            - "--keeper-timeout=2m"
+            - "--keeper-regions-per-request=-1"
+            - "--data-cache-ttl=10m"
+            - "--aws-price-list-url=https://pricing.us-east-1.amazonaws.com"
+            - "--max-concurrent-reconciles=4"
+            - "--nodeclass-discovery-interval=5m"
+            - "--zap-devel=false"
+            - "--zap-encoder=json"
+            - "--zap-log-level=info"
+            - "--zap-stacktrace-level=error"
+            - "--zap-time-encoding=iso8601"
+          ports:
+            - name: health
+              containerPort: 8081
+              protocol: TCP
+          livenessProbe:
+            httpGet:
+              path: /healthz
+              port: health
+            initialDelaySeconds: 15
+            periodSeconds: 20
+          readinessProbe:
+            httpGet:
+              path: /readyz
+              port: health
+            initialDelaySeconds: 5
+            periodSeconds: 10
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop:
+              - ALL
+            readOnlyRootFilesystem: true
+          resources:
+            limits:
+              memory: 512Mi
+            requests:
+              cpu: 50m
+              memory: 128Mi
+          volumeMounts:
+            - name: tmp
+              mountPath: /tmp
+      volumes:
+        - name: tmp
+          emptyDir: {}
+      nodeSelector:
+        kubernetes.io/os: linux
+      affinity:
+        nodeAffinity:
+          preferredDuringSchedulingIgnoredDuringExecution:
+          - preference:
+              matchExpressions:
+              - key: karpenter.sh/nodepool
+                operator: DoesNotExist
+            weight: 50

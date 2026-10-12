@@ -1,0 +1,26 @@
+apiVersion: v2
+name: sc-karpenter-nodepool
+description: >-
+  Kubernetes controller that turns an SCNodePool into a Karpenter NodePool
+  whose instance-type list is selected from Spare Cores benchmark, price and
+  hardware data.
+type: application
+# The release workflow (.github/workflows/release.yml) packages the chart with
+# the version of the Git tag for both fields; the image tag defaults to
+# appVersion. The development values below match `make docker-build`.
+version: 0.0.0-dev
+appVersion: dev
+kubeVersion: ">=1.28.0-0"
+home: https://github.com/SpareCores/sc-karpenter-nodepool
+sources:
+  - https://github.com/SpareCores/sc-karpenter-nodepool
+keywords:
+  - karpenter
+  - nodepool
+  - spare-cores
+  - cost-optimization
+maintainers:
+  - name: Spare Cores
+    url: https://sparecores.com
+annotations:
+  artifacthub.io/license: MPL-2.0

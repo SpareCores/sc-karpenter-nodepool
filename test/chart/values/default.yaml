@@ -1,0 +1,3 @@
+# The chart's defaults (the CRD is rendered by its own check).
+crds:
+  install: false

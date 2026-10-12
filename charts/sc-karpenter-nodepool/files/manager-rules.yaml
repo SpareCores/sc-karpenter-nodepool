@@ -1,0 +1,141 @@
+- apiGroups:
+    - ""
+  resources:
+    - events
+  verbs:
+    - create
+    - list
+    - patch
+    - watch
+- apiGroups:
+    - ""
+  resources:
+    - nodes
+  verbs:
+    - get
+    - list
+    - watch
+- apiGroups:
+    - eks.amazonaws.com
+  resources:
+    - nodeclasses
+  verbs:
+    - get
+    - list
+    - watch
+- apiGroups:
+    - events.k8s.io
+  resources:
+    - events
+  verbs:
+    - create
+    - patch
+- apiGroups:
+    - karpenter.alibabacloud.com
+    - karpenter.k8s.alibabacloud
+  resources:
+    - ecsnodeclasses
+  verbs:
+    - get
+    - list
+    - watch
+- apiGroups:
+    - karpenter.azure.com
+  resources:
+    - aksnodeclasses
+  verbs:
+    - get
+    - list
+    - watch
+- apiGroups:
+    - karpenter.hetzner.cloud
+    - karpenter.itsh.dev
+  resources:
+    - hcloudnodeclasses
+  verbs:
+    - get
+    - list
+    - watch
+- apiGroups:
+    - karpenter.k8s.aws
+  resources:
+    - ec2nodeclasses
+  verbs:
+    - get
+    - list
+    - watch
+- apiGroups:
+    - karpenter.k8s.gcp
+  resources:
+    - gcenodeclasses
+  verbs:
+    - get
+    - list
+    - watch
+- apiGroups:
+    - karpenter.k8s.upcloud
+  resources:
+    - upcloudnodeclasses
+  verbs:
+    - get
+    - list
+    - watch
+- apiGroups:
+    - karpenter.ovhcloud.sh
+  resources:
+    - ovhnodeclasses
+  verbs:
+    - get
+    - list
+    - watch
+- apiGroups:
+    - karpenter.sh
+  resources:
+    - nodeclaims
+  verbs:
+    - get
+    - list
+    - watch
+- apiGroups:
+    - karpenter.sh
+  resources:
+    - nodepools
+  verbs:
+    - create
+    - get
+    - list
+    - patch
+    - update
+    - watch
+- apiGroups:
+    - karpenter.sparecores.com
+  resources:
+    - scnodepools
+  verbs:
+    - get
+    - list
+    - patch
+    - update
+    - watch
+- apiGroups:
+    - karpenter.sparecores.com
+  resources:
+    - scnodepools/finalizers
+  verbs:
+    - update
+- apiGroups:
+    - karpenter.sparecores.com
+  resources:
+    - scnodepools/status
+  verbs:
+    - get
+    - patch
+    - update
+- apiGroups:
+    - karpenter.vultr.com
+  resources:
+    - vultrnodeclasses
+  verbs:
+    - get
+    - list
+    - watch

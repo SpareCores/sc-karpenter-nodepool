@@ -25,9 +25,9 @@ jobs:
 
       - uses: ./.github/actions/dev-image
 
-      - name: Generated code and CRDs are up to date
+      - name: Generated code, CRDs, chart and API docs are up to date
         run: |
-          hack/dev.sh make generate manifests
+          hack/dev.sh make generate manifests chart-crds chart-rbac docs-api
           git add -N .
           git diff --exit-code
 
@@ -36,6 +36,12 @@ jobs:
 
       - name: Test
         run: hack/dev.sh make test
+
+      - name: Helm chart (lint, golden output, CRD and RBAC in sync)
+        run: hack/dev.sh make test-chart
+
+      - name: Documentation links
+        run: hack/dev.sh make test-docs
 
       - name: Lint workflows and scripts
         run: hack/dev.sh bash -c 'actionlint && shellcheck -x hack/*.sh test/*.sh test/*/*.sh'

@@ -10,6 +10,10 @@ that matches what you need:
 | [Reference](reference/) | Technical descriptions | [reference/README.md](reference/README.md) |
 | [Explanation](explanation/) | Understanding-oriented background | [explanation/README.md](explanation/README.md) |
 
+New here? Start with the [kind quickstart](tutorials/kind-quickstart.md), then
+[install the controller](how-to-guides/install.md) and
+[write an SCNodePool](how-to-guides/write-an-scnodepool.md).
+
 Meta: [Documentation guide](documentation-guide/) — where new docs go and
 templates to use.
 

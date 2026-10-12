@@ -1,0 +1,16 @@
+# Everything optional turned off: no metrics, no leader election, the
+# ServiceAccount and the RBAC are managed elsewhere, the CRD too.
+fullnameOverride: sckn
+leaderElection:
+  enabled: false
+serviceAccount:
+  create: false
+  name: existing-sa
+metrics:
+  enabled: false
+rbac:
+  create: false
+  userRoles:
+    create: false
+crds:
+  install: false

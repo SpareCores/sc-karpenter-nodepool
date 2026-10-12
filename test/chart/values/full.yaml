@@ -1,0 +1,87 @@
+# Every optional feature turned on.
+nameOverride: sckn
+replicaCount: 2
+image:
+  tag: v1.2.3
+  digest: sha256:0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef
+  pullPolicy: Always
+imagePullSecrets:
+  - name: registry
+serviceAccount:
+  annotations: {example.com/role: manager}
+keeper:
+  url: https://keeper.example.com
+  timeout: 90s
+  regionsPerRequest: 8
+  apiKey:
+    existingSecret: keeper-credentials
+    key: token
+dataCacheTTL: 30m
+maxConcurrentReconciles: 8
+nodeClassDiscoveryInterval: 1m
+awsPriceListURL: https://pricing.example.com
+nodeClassRefOverride: karpenter.kwok.sh/KWOKNodeClass/default
+logging:
+  level: debug
+  encoder: console
+  development: true
+  stacktraceLevel: panic
+  timeEncoding: rfc3339
+health:
+  port: 9081
+metrics:
+  port: 9443
+  enableHTTP2: true
+  service:
+    annotations: {example.com/scrape: "true"}
+  readers:
+    - kind: ServiceAccount
+      name: prometheus
+      namespace: monitoring
+serviceMonitor:
+  enabled: true
+  namespace: monitoring
+  interval: 1m
+  scrapeTimeout: 20s
+  labels: {release: prometheus}
+extraArgs: ["--zap-time-encoding=epoch"]
+extraEnv:
+  - {name: HTTPS_PROXY, value: "http://proxy.example.com:3128"}
+extraVolumes:
+  - {name: ca, configMap: {name: corporate-ca}}
+extraVolumeMounts:
+  - {name: ca, mountPath: /etc/ssl/extra, readOnly: true}
+rbac:
+  nodeClassGroups: [karpenter.k8s.aws, eks.amazonaws.com]
+  extraRules:
+    - apiGroups: [""]
+      resources: [configmaps]
+      verbs: [get]
+crds:
+  install: false
+podAnnotations: {example.com/note: pod}
+podLabels: {team: platform}
+deploymentAnnotations: {example.com/note: deployment}
+priorityClassName: system-cluster-critical
+resources:
+  requests: {cpu: 100m, memory: 256Mi}
+  limits: {cpu: "1", memory: 1Gi}
+affinity:
+  nodeAffinity:
+    requiredDuringSchedulingIgnoredDuringExecution:
+      nodeSelectorTerms:
+        - matchExpressions:
+            - {key: karpenter.sh/nodepool, operator: DoesNotExist}
+nodeSelector:
+  kubernetes.io/os: linux
+  node-role.example.com/system: "true"
+tolerations:
+  - {key: CriticalAddonsOnly, operator: Exists}
+topologySpreadConstraints:
+  - maxSkew: 1
+    topologyKey: topology.kubernetes.io/zone
+    whenUnsatisfiable: ScheduleAnyway
+    labelSelector:
+      matchLabels: {app.kubernetes.io/name: sckn}
+podDisruptionBudget:
+  enabled: true

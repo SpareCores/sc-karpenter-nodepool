@@ -1,0 +1,146 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "sckn.fullname" . }}
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "sckn.labels" . | nindent 4 }}
+  {{- with .Values.deploymentAnnotations }}
+  annotations:
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
+spec:
+  replicas: {{ .Values.replicaCount }}
+  selector:
+    matchLabels:
+      {{- include "sckn.selectorLabels" . | nindent 6 }}
+  template:
+    metadata:
+      annotations:
+        kubectl.kubernetes.io/default-container: manager
+        {{- with .Values.podAnnotations }}
+        {{- toYaml . | nindent 8 }}
+        {{- end }}
+      labels:
+        {{- include "sckn.labels" . | nindent 8 }}
+        {{- with .Values.podLabels }}
+        {{- toYaml . | nindent 8 }}
+        {{- end }}
+    spec:
+      {{- with .Values.imagePullSecrets }}
+      imagePullSecrets:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      serviceAccountName: {{ include "sckn.serviceAccountName" . }}
+      automountServiceAccountToken: {{ .Values.serviceAccount.automount }}
+      {{- with .Values.priorityClassName }}
+      priorityClassName: {{ . | quote }}
+      {{- end }}
+      securityContext:
+        {{- toYaml .Values.podSecurityContext | nindent 8 }}
+      terminationGracePeriodSeconds: {{ .Values.terminationGracePeriodSeconds }}
+      containers:
+        - name: manager
+          image: {{ include "sckn.image" . | quote }}
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          command:
+            - /manager
+          args:
+            - {{ printf "--leader-elect=%t" .Values.leaderElection.enabled | quote }}
+            - {{ printf "--health-probe-bind-address=:%v" .Values.health.port | quote }}
+            {{- if .Values.metrics.enabled }}
+            - {{ printf "--metrics-bind-address=:%v" .Values.metrics.port | quote }}
+            {{- else }}
+            - "--metrics-bind-address=0"
+            {{- end }}
+            - {{ printf "--metrics-secure=%t" .Values.metrics.secure | quote }}
+            - {{ printf "--enable-http2=%t" .Values.metrics.enableHTTP2 | quote }}
+            - {{ printf "--keeper-url=%s" .Values.keeper.url | quote }}
+            - {{ printf "--keeper-timeout=%s" .Values.keeper.timeout | quote }}
+            - {{ printf "--keeper-regions-per-request=%v" .Values.keeper.regionsPerRequest | quote }}
+            {{- if .Values.keeper.apiKey.existingSecret }}
+            - "--keeper-api-key-file=/etc/sc-karpenter-nodepool/keeper/api-key"
+            {{- end }}
+            - {{ printf "--data-cache-ttl=%s" .Values.dataCacheTTL | quote }}
+            - {{ printf "--aws-price-list-url=%s" .Values.awsPriceListURL | quote }}
+            - {{ printf "--max-concurrent-reconciles=%v" .Values.maxConcurrentReconciles | quote }}
+            - {{ printf "--nodeclass-discovery-interval=%s" .Values.nodeClassDiscoveryInterval | quote }}
+            {{- with .Values.nodeClassRefOverride }}
+            - {{ printf "--node-class-ref-override=%s" . | quote }}
+            {{- end }}
+            - {{ printf "--zap-devel=%t" .Values.logging.development | quote }}
+            - {{ printf "--zap-encoder=%s" .Values.logging.encoder | quote }}
+            - {{ printf "--zap-log-level=%s" (toString .Values.logging.level) | quote }}
+            - {{ printf "--zap-stacktrace-level=%s" .Values.logging.stacktraceLevel | quote }}
+            - {{ printf "--zap-time-encoding=%s" .Values.logging.timeEncoding | quote }}
+            {{- range .Values.extraArgs }}
+            - {{ . | quote }}
+            {{- end }}
+          {{- with .Values.extraEnv }}
+          env:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+          ports:
+            - name: health
+              containerPort: {{ .Values.health.port }}
+              protocol: TCP
+            {{- if .Values.metrics.enabled }}
+            - name: metrics
+              containerPort: {{ .Values.metrics.port }}
+              protocol: TCP
+            {{- end }}
+          livenessProbe:
+            httpGet:
+              path: /healthz
+              port: health
+            {{- toYaml .Values.livenessProbe | nindent 12 }}
+          readinessProbe:
+            httpGet:
+              path: /readyz
+              port: health
+            {{- toYaml .Values.readinessProbe | nindent 12 }}
+          securityContext:
+            {{- toYaml .Values.securityContext | nindent 12 }}
+          resources:
+            {{- toYaml .Values.resources | nindent 12 }}
+          volumeMounts:
+            - name: tmp
+              mountPath: /tmp
+            {{- if .Values.keeper.apiKey.existingSecret }}
+            - name: keeper-api-key
+              mountPath: /etc/sc-karpenter-nodepool/keeper
+              readOnly: true
+            {{- end }}
+            {{- with .Values.extraVolumeMounts }}
+            {{- toYaml . | nindent 12 }}
+            {{- end }}
+      volumes:
+        - name: tmp
+          emptyDir: {}
+        {{- if .Values.keeper.apiKey.existingSecret }}
+        - name: keeper-api-key
+          secret:
+            secretName: {{ .Values.keeper.apiKey.existingSecret | quote }}
+            items:
+              - key: {{ .Values.keeper.apiKey.key | quote }}
+                path: api-key
+        {{- end }}
+        {{- with .Values.extraVolumes }}
+        {{- toYaml . | nindent 8 }}
+        {{- end }}
+      {{- with .Values.nodeSelector }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.affinity }}
+      affinity:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.tolerations }}
+      tolerations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.topologySpreadConstraints }}
+      topologySpreadConstraints:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}

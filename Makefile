@@ -56,6 +56,18 @@ test: ## Run unit and envtest suites (needs KUBEBUILDER_ASSETS, set in the dev c
 	@test -n "$$KUBEBUILDER_ASSETS" || { echo "KUBEBUILDER_ASSETS is not set; run via hack/dev.sh" >&2; exit 1; }
 	go test ./... -coverprofile cover.out
 
+.PHONY: chart-crds
+chart-crds: manifests ## Copy the generated CRD into the Helm chart.
+	hack/chart-sync.sh crds
+
+.PHONY: chart-rbac
+chart-rbac: manifests ## Copy the generated RBAC rules of the manager into the Helm chart.
+	hack/chart-sync.sh rbac
+
+.PHONY: docs-api
+docs-api: manifests ## Generate docs/reference/api.md from the CRD.
+	go run ./hack/apidocs config/crd/bases/karpenter.sparecores.com_scnodepools.yaml > docs/reference/api.md
+
 ##@ Test lanes
 
 # These lanes create a kind cluster and need the dev container (docker socket,
@@ -74,12 +86,31 @@ test-kwok: ## L3: real core Karpenter (KWOK provider) in kind, for KWOK_CORE_VER
 	@test -n "$$SCKN_DEV_CONTAINER" || { echo "run via hack/dev.sh" >&2; exit 1; }
 	KWOK_CORE_VERSION=$(KWOK_CORE_VERSION) test/kwok/run.sh
 
+.PHONY: kwok-up
+kwok-up: ## kind + KWOK Karpenter + the controller + a Keeper replay server, left running (tutorial).
+	@test -n "$$SCKN_DEV_CONTAINER" || { echo "run via hack/dev.sh" >&2; exit 1; }
+	KWOK_SETUP_ONLY=1 KWOK_CORE_VERSION=$(KWOK_CORE_VERSION) test/kwok/run.sh
+
+.PHONY: kwok-down
+kwok-down: ## Delete the cluster and the images of kwok-up.
+	@test -n "$$SCKN_DEV_CONTAINER" || { echo "run via hack/dev.sh" >&2; exit 1; }
+	test/kwok/down.sh
+
 .PHONY: test-kwok-matrix
 test-kwok-matrix: ## L3 for every core version of test/kwok/core-versions.txt, one after the other.
 	@test -n "$$SCKN_DEV_CONTAINER" || { echo "run via hack/dev.sh" >&2; exit 1; }
 	@for v in $$(awk '!/^#/ && NF {print $$1}' test/kwok/core-versions.txt); do \
 		KWOK_CORE_VERSION=$$v test/kwok/run.sh || exit 1; \
 	done
+
+.PHONY: test-chart
+test-chart: ## Helm chart: lint, golden `helm template` output, CRD and RBAC in sync (UPDATE=1 rewrites the golden files).
+	@test -n "$$SCKN_DEV_CONTAINER" || { echo "run via hack/dev.sh" >&2; exit 1; }
+	test/chart/run.sh
+
+.PHONY: test-docs
+test-docs: ## Check that the relative links and anchors of the Markdown files resolve.
+	python3 hack/check-docs.py
 
 ##@ Build
 

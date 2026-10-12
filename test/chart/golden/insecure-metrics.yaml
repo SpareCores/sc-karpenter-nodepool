@@ -1,0 +1,457 @@
+---
+# Source: sc-karpenter-nodepool/templates/serviceaccount.yaml
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: sckn-sc-karpenter-nodepool
+  namespace: sc-karpenter-nodepool
+  labels:
+    helm.sh/chart: sc-karpenter-nodepool-0.0.0-dev
+    app.kubernetes.io/name: sc-karpenter-nodepool
+    app.kubernetes.io/instance: sckn
+    app.kubernetes.io/version: "dev"
+    app.kubernetes.io/managed-by: Helm
+automountServiceAccountToken: true
+
+---
+# Source: sc-karpenter-nodepool/templates/rbac.yaml
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: sckn-sc-karpenter-nodepool-manager
+  labels:
+    helm.sh/chart: sc-karpenter-nodepool-0.0.0-dev
+    app.kubernetes.io/name: sc-karpenter-nodepool
+    app.kubernetes.io/instance: sckn
+    app.kubernetes.io/version: "dev"
+    app.kubernetes.io/managed-by: Helm
+rules:
+  - apiGroups:
+      - ""
+    resources:
+      - events
+    verbs:
+      - create
+      - list
+      - patch
+      - watch
+  - apiGroups:
+      - ""
+    resources:
+      - nodes
+    verbs:
+      - get
+      - list
+      - watch
+  - apiGroups:
+      - eks.amazonaws.com
+    resources:
+      - nodeclasses
+    verbs:
+      - get
+      - list
+      - watch
+  - apiGroups:
+      - events.k8s.io
+    resources:
+      - events
+    verbs:
+      - create
+      - patch
+  - apiGroups:
+      - karpenter.alibabacloud.com
+      - karpenter.k8s.alibabacloud
+    resources:
+      - ecsnodeclasses
+    verbs:
+      - get
+      - list
+      - watch
+  - apiGroups:
+      - karpenter.azure.com
+    resources:
+      - aksnodeclasses
+    verbs:
+      - get
+      - list
+      - watch
+  - apiGroups:
+      - karpenter.hetzner.cloud
+      - karpenter.itsh.dev
+    resources:
+      - hcloudnodeclasses
+    verbs:
+      - get
+      - list
+      - watch
+  - apiGroups:
+      - karpenter.k8s.aws
+    resources:
+      - ec2nodeclasses
+    verbs:
+      - get
+      - list
+      - watch
+  - apiGroups:
+      - karpenter.k8s.gcp
+    resources:
+      - gcenodeclasses
+    verbs:
+      - get
+      - list
+      - watch
+  - apiGroups:
+      - karpenter.k8s.upcloud
+    resources:
+      - upcloudnodeclasses
+    verbs:
+      - get
+      - list
+      - watch
+  - apiGroups:
+      - karpenter.ovhcloud.sh
+    resources:
+      - ovhnodeclasses
+    verbs:
+      - get
+      - list
+      - watch
+  - apiGroups:
+      - karpenter.sh
+    resources:
+      - nodeclaims
+    verbs:
+      - get
+      - list
+      - watch
+  - apiGroups:
+      - karpenter.sh
+    resources:
+      - nodepools
+    verbs:
+      - create
+      - get
+      - list
+      - patch
+      - update
+      - watch
+  - apiGroups:
+      - karpenter.sparecores.com
+    resources:
+      - scnodepools
+    verbs:
+      - get
+      - list
+      - patch
+      - update
+      - watch
+  - apiGroups:
+      - karpenter.sparecores.com
+    resources:
+      - scnodepools/finalizers
+    verbs:
+      - update
+  - apiGroups:
+      - karpenter.sparecores.com
+    resources:
+      - scnodepools/status
+    verbs:
+      - get
+      - patch
+      - update
+  - apiGroups:
+      - karpenter.vultr.com
+    resources:
+      - vultrnodeclasses
+    verbs:
+      - get
+      - list
+      - watch
+
+---
+# Source: sc-karpenter-nodepool/templates/userroles.yaml
+# Roles for the users of SCNodePools (config/rbac/scnodepool_*_role.yaml).
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: sckn-sc-karpenter-nodepool-scnodepool-admin
+  labels:
+    helm.sh/chart: sc-karpenter-nodepool-0.0.0-dev
+    app.kubernetes.io/name: sc-karpenter-nodepool
+    app.kubernetes.io/instance: sckn
+    app.kubernetes.io/version: "dev"
+    app.kubernetes.io/managed-by: Helm
+rules:
+  - apiGroups: [karpenter.sparecores.com]
+    resources: [scnodepools]
+    verbs: ["*"]
+  - apiGroups: [karpenter.sparecores.com]
+    resources: [scnodepools/status]
+    verbs: [get]
+
+---
+# Source: sc-karpenter-nodepool/templates/userroles.yaml
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: sckn-sc-karpenter-nodepool-scnodepool-editor
+  labels:
+    helm.sh/chart: sc-karpenter-nodepool-0.0.0-dev
+    app.kubernetes.io/name: sc-karpenter-nodepool
+    app.kubernetes.io/instance: sckn
+    app.kubernetes.io/version: "dev"
+    app.kubernetes.io/managed-by: Helm
+rules:
+  - apiGroups: [karpenter.sparecores.com]
+    resources: [scnodepools]
+    verbs: [create, delete, get, list, patch, update, watch]
+  - apiGroups: [karpenter.sparecores.com]
+    resources: [scnodepools/status]
+    verbs: [get]
+
+---
+# Source: sc-karpenter-nodepool/templates/userroles.yaml
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: sckn-sc-karpenter-nodepool-scnodepool-viewer
+  labels:
+    helm.sh/chart: sc-karpenter-nodepool-0.0.0-dev
+    app.kubernetes.io/name: sc-karpenter-nodepool
+    app.kubernetes.io/instance: sckn
+    app.kubernetes.io/version: "dev"
+    app.kubernetes.io/managed-by: Helm
+rules:
+  - apiGroups: [karpenter.sparecores.com]
+    resources: [scnodepools]
+    verbs: [get, list, watch]
+  - apiGroups: [karpenter.sparecores.com]
+    resources: [scnodepools/status]
+    verbs: [get]
+
+---
+# Source: sc-karpenter-nodepool/templates/rbac.yaml
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: sckn-sc-karpenter-nodepool-manager
+  labels:
+    helm.sh/chart: sc-karpenter-nodepool-0.0.0-dev
+    app.kubernetes.io/name: sc-karpenter-nodepool
+    app.kubernetes.io/instance: sckn
+    app.kubernetes.io/version: "dev"
+    app.kubernetes.io/managed-by: Helm
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: sckn-sc-karpenter-nodepool-manager
+subjects:
+  - kind: ServiceAccount
+    name: sckn-sc-karpenter-nodepool
+    namespace: sc-karpenter-nodepool
+
+---
+# Source: sc-karpenter-nodepool/templates/rbac.yaml
+# Leader election (config/rbac/leader_election_role.yaml).
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: sckn-sc-karpenter-nodepool-leader-election
+  namespace: sc-karpenter-nodepool
+  labels:
+    helm.sh/chart: sc-karpenter-nodepool-0.0.0-dev
+    app.kubernetes.io/name: sc-karpenter-nodepool
+    app.kubernetes.io/instance: sckn
+    app.kubernetes.io/version: "dev"
+    app.kubernetes.io/managed-by: Helm
+rules:
+  - apiGroups: [""]
+    resources: [configmaps]
+    verbs: [get, list, watch, create, update, patch, delete]
+  - apiGroups: [coordination.k8s.io]
+    resources: [leases]
+    verbs: [get, list, watch, create, update, patch, delete]
+  - apiGroups: [""]
+    resources: [events]
+    verbs: [create, patch]
+
+---
+# Source: sc-karpenter-nodepool/templates/rbac.yaml
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: sckn-sc-karpenter-nodepool-leader-election
+  namespace: sc-karpenter-nodepool
+  labels:
+    helm.sh/chart: sc-karpenter-nodepool-0.0.0-dev
+    app.kubernetes.io/name: sc-karpenter-nodepool
+    app.kubernetes.io/instance: sckn
+    app.kubernetes.io/version: "dev"
+    app.kubernetes.io/managed-by: Helm
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: sckn-sc-karpenter-nodepool-leader-election
+subjects:
+  - kind: ServiceAccount
+    name: sckn-sc-karpenter-nodepool
+    namespace: sc-karpenter-nodepool
+
+---
+# Source: sc-karpenter-nodepool/templates/service.yaml
+apiVersion: v1
+kind: Service
+metadata:
+  name: sckn-sc-karpenter-nodepool-metrics
+  namespace: sc-karpenter-nodepool
+  labels:
+    helm.sh/chart: sc-karpenter-nodepool-0.0.0-dev
+    app.kubernetes.io/name: sc-karpenter-nodepool
+    app.kubernetes.io/instance: sckn
+    app.kubernetes.io/version: "dev"
+    app.kubernetes.io/managed-by: Helm
+spec:
+  type: ClusterIP
+  ports:
+    - name: http
+      port: 8443
+      protocol: TCP
+      targetPort: metrics
+  selector:
+    app.kubernetes.io/name: sc-karpenter-nodepool
+    app.kubernetes.io/instance: sckn
+
+---
+# Source: sc-karpenter-nodepool/templates/deployment.yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: sckn-sc-karpenter-nodepool
+  namespace: sc-karpenter-nodepool
+  labels:
+    helm.sh/chart: sc-karpenter-nodepool-0.0.0-dev
+    app.kubernetes.io/name: sc-karpenter-nodepool
+    app.kubernetes.io/instance: sckn
+    app.kubernetes.io/version: "dev"
+    app.kubernetes.io/managed-by: Helm
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: sc-karpenter-nodepool
+      app.kubernetes.io/instance: sckn
+  template:
+    metadata:
+      annotations:
+        kubectl.kubernetes.io/default-container: manager
+      labels:
+        helm.sh/chart: sc-karpenter-nodepool-0.0.0-dev
+        app.kubernetes.io/name: sc-karpenter-nodepool
+        app.kubernetes.io/instance: sckn
+        app.kubernetes.io/version: "dev"
+        app.kubernetes.io/managed-by: Helm
+    spec:
+      serviceAccountName: sckn-sc-karpenter-nodepool
+      automountServiceAccountToken: true
+      securityContext:
+        runAsNonRoot: true
+        seccompProfile:
+          type: RuntimeDefault
+      terminationGracePeriodSeconds: 10
+      containers:
+        - name: manager
+          image: "ghcr.io/sparecores/sc-karpenter-nodepool:dev"
+          imagePullPolicy: IfNotPresent
+          command:
+            - /manager
+          args:
+            - "--leader-elect=true"
+            - "--health-probe-bind-address=:8081"
+            - "--metrics-bind-address=:8443"
+            - "--metrics-secure=false"
+            - "--enable-http2=false"
+            - "--keeper-url=https://keeper.sparecores.net"
+            - "--keeper-timeout=2m"
+            - "--keeper-regions-per-request=-1"
+            - "--data-cache-ttl=10m"
+            - "--aws-price-list-url=https://pricing.us-east-1.amazonaws.com"
+            - "--max-concurrent-reconciles=4"
+            - "--nodeclass-discovery-interval=5m"
+            - "--zap-devel=false"
+            - "--zap-encoder=json"
+            - "--zap-log-level=info"
+            - "--zap-stacktrace-level=error"
+            - "--zap-time-encoding=iso8601"
+          ports:
+            - name: health
+              containerPort: 8081
+              protocol: TCP
+            - name: metrics
+              containerPort: 8443
+              protocol: TCP
+          livenessProbe:
+            httpGet:
+              path: /healthz
+              port: health
+            initialDelaySeconds: 15
+            periodSeconds: 20
+          readinessProbe:
+            httpGet:
+              path: /readyz
+              port: health
+            initialDelaySeconds: 5
+            periodSeconds: 10
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop:
+              - ALL
+            readOnlyRootFilesystem: true
+          resources:
+            limits:
+              memory: 512Mi
+            requests:
+              cpu: 50m
+              memory: 128Mi
+          volumeMounts:
+            - name: tmp
+              mountPath: /tmp
+      volumes:
+        - name: tmp
+          emptyDir: {}
+      nodeSelector:
+        kubernetes.io/os: linux
+      affinity:
+        nodeAffinity:
+          preferredDuringSchedulingIgnoredDuringExecution:
+          - preference:
+              matchExpressions:
+              - key: karpenter.sh/nodepool
+                operator: DoesNotExist
+            weight: 50
+
+---
+# Source: sc-karpenter-nodepool/templates/servicemonitor.yaml
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: sckn-sc-karpenter-nodepool
+  namespace: sc-karpenter-nodepool
+  labels:
+    helm.sh/chart: sc-karpenter-nodepool-0.0.0-dev
+    app.kubernetes.io/name: sc-karpenter-nodepool
+    app.kubernetes.io/instance: sckn
+    app.kubernetes.io/version: "dev"
+    app.kubernetes.io/managed-by: Helm
+spec:
+  namespaceSelector:
+    matchNames:
+      - sc-karpenter-nodepool
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: sc-karpenter-nodepool
+      app.kubernetes.io/instance: sckn
+  endpoints:
+    - port: http
+      path: /metrics
+      interval: 30s

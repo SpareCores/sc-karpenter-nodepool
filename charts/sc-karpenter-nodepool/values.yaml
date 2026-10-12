@@ -1,0 +1,215 @@
+# Default values of the sc-karpenter-nodepool chart. Every manager flag of
+# cmd/main.go has a value here; docs/reference/controller.md lists them next to
+# the flags and the SCKN_* environment variables.
+
+nameOverride: ""
+fullnameOverride: ""
+
+# Replicas of the controller. With leaderElection.enabled only the leader
+# reconciles; the others are warm standbys.
+replicaCount: 1
+
+image:
+  repository: ghcr.io/sparecores/sc-karpenter-nodepool
+  # Defaults to the chart's appVersion (the release tag without the "v").
+  tag: ""
+  # Takes precedence over tag when set, for example "sha256:...".
+  digest: ""
+  pullPolicy: IfNotPresent
+
+imagePullSecrets: []
+
+serviceAccount:
+  create: true
+  # Defaults to the full name of the release.
+  name: ""
+  annotations: {}
+  automount: true
+
+# --------------------------------------------------------------------------
+# Controller settings (manager flags)
+# --------------------------------------------------------------------------
+
+# Only one replica reconciles at a time; uses a Lease in the release namespace
+# (--leader-elect).
+leaderElection:
+  enabled: true
+
+keeper:
+  # Base URL of the Spare Cores Keeper API (--keeper-url).
+  url: https://keeper.sparecores.net
+  # Timeout of one Keeper HTTP request (--keeper-timeout).
+  timeout: 2m
+  # Regions per Keeper /servers request (--keeper-regions-per-request). -1:
+  # 3 without an API key (Keeper's limit), unlimited with one.
+  regionsPerRequest: -1
+  # Optional Keeper API key, read from an existing Secret and mounted as a file
+  # (--keeper-api-key-file). Without it the access is anonymous.
+  apiKey:
+    existingSecret: ""
+    # Key of the Secret that holds the API key.
+    key: api-key
+
+# How long Keeper responses and EKS Auto Mode fees are shared between the
+# refreshes of different SCNodePools (--data-cache-ttl).
+dataCacheTTL: 10m
+# SCNodePools reconciled (refreshed) concurrently (--max-concurrent-reconciles).
+maxConcurrentReconciles: 4
+# How often the controller looks for newly installed NodeClass CRDs to watch
+# (--nodeclass-discovery-interval).
+nodeClassDiscoveryInterval: 5m
+# AWS public price list endpoint, used for the EKS Auto Mode fees and the
+# Auto Mode instance list (--aws-price-list-url).
+awsPriceListURL: https://pricing.us-east-1.amazonaws.com
+
+# Test mode only (--node-class-ref-override): group/kind/name that replaces the
+# nodeClassRef of EVERY generated NodePool. The KWOK test lane uses it; never
+# set it on a real cluster.
+nodeClassRefOverride: ""
+
+logging:
+  # zap log level: debug, info, error, or an integer (--zap-log-level).
+  level: info
+  # json or console (--zap-encoder).
+  encoder: json
+  # Development mode: console-style output, stack traces on warnings
+  # (--zap-devel). The manager defaults to true; the chart turns it off.
+  development: false
+  # Level from which stack traces are logged (--zap-stacktrace-level).
+  stacktraceLevel: error
+  # epoch, millis, nano, iso8601, rfc3339 or rfc3339nano (--zap-time-encoding).
+  timeEncoding: iso8601
+
+health:
+  # Port of the /healthz and /readyz endpoints (--health-probe-bind-address).
+  port: 8081
+
+metrics:
+  enabled: true
+  # Port of the metrics endpoint (--metrics-bind-address).
+  port: 8443
+  # Serve over HTTPS with authentication and authorisation (--metrics-secure).
+  # The certificate is self-signed. false serves plain HTTP.
+  secure: true
+  # Enable HTTP/2 on the metrics server (--enable-http2).
+  enableHTTP2: false
+  service:
+    type: ClusterIP
+    annotations: {}
+  # Subjects (ServiceAccounts, groups) that may read /metrics when secure is
+  # true, for example the service account of Prometheus. They are bound to a
+  # ClusterRole with get on /metrics.
+  readers: []
+  #  - kind: ServiceAccount
+  #    name: prometheus
+  #    namespace: monitoring
+
+# Prometheus Operator ServiceMonitor (needs its CRD).
+serviceMonitor:
+  enabled: false
+  # Namespace of the ServiceMonitor; defaults to the release namespace.
+  namespace: ""
+  interval: 30s
+  scrapeTimeout: ""
+  labels: {}
+  # Skip verification of the self-signed certificate (metrics.secure).
+  insecureSkipVerify: true
+
+# Arguments and environment added to the manager as they are.
+extraArgs: []
+extraEnv: []
+extraVolumes: []
+extraVolumeMounts: []
+
+# --------------------------------------------------------------------------
+# RBAC
+# --------------------------------------------------------------------------
+
+rbac:
+  create: true
+  # API groups whose NodeClass kinds the controller may read (it reads the
+  # NodeClass of every SCNodePool to detect the cloud region). Empty: the
+  # groups of every supported provider. A group that is not listed, for
+  # example karpenter.k8s.aws, makes the controller unable to read those
+  # NodeClasses; the regions then come from the node labels.
+  nodeClassGroups: []
+  # ClusterRoles (admin, editor, viewer) that you can bind to the users of
+  # SCNodePools. The controller itself does not use them.
+  userRoles:
+    create: true
+  # Rules appended to the manager's ClusterRole.
+  extraRules: []
+
+crds:
+  # Install the SCNodePool CRD with the chart. Turn off to manage it yourself,
+  # for example with kubectl apply -f config/crd/bases.
+  install: true
+  # Keep the CRD (and with it every SCNodePool) when the release is
+  # uninstalled (helm.sh/resource-policy: keep).
+  keep: true
+
+# --------------------------------------------------------------------------
+# Pod
+# --------------------------------------------------------------------------
+
+podAnnotations: {}
+podLabels: {}
+deploymentAnnotations: {}
+
+priorityClassName: ""
+
+podSecurityContext:
+  runAsNonRoot: true
+  seccompProfile:
+    type: RuntimeDefault
+
+securityContext:
+  allowPrivilegeEscalation: false
+  readOnlyRootFilesystem: true
+  capabilities:
+    drop: [ALL]
+
+resources:
+  requests:
+    cpu: 50m
+    memory: 128Mi
+  limits:
+    memory: 512Mi
+
+livenessProbe:
+  initialDelaySeconds: 15
+  periodSeconds: 20
+readinessProbe:
+  initialDelaySeconds: 5
+  periodSeconds: 10
+
+terminationGracePeriodSeconds: 10
+
+# The controller must not depend on nodes that Karpenter launches for the
+# pools it generates: if such a node goes away, so does the controller that
+# would re-create the pool. Prefer nodes without the karpenter.sh/nodepool
+# label (for example a managed node group). It is only a preference so that the
+# chart also schedules where every node is Karpenter's (EKS Auto Mode); pin it
+# with nodeSelector, tolerations and a required affinity as described in
+# docs/how-to-guides/install.md.
+affinity:
+  nodeAffinity:
+    preferredDuringSchedulingIgnoredDuringExecution:
+      - weight: 50
+        preference:
+          matchExpressions:
+            - key: karpenter.sh/nodepool
+              operator: DoesNotExist
+
+nodeSelector:
+  kubernetes.io/os: linux
+
+tolerations: []
+
+topologySpreadConstraints: []
+
+podDisruptionBudget:
+  # Only useful with replicaCount > 1 (a PDB with minAvailable 1 on a single
+  # replica blocks node drains).
+  enabled: false
+  minAvailable: 1

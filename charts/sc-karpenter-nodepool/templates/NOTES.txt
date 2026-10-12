@@ -1,0 +1,18 @@
+sc-karpenter-nodepool {{ .Chart.AppVersion }} is installed in the namespace {{ .Release.Namespace }}.
+
+Create an SCNodePool to get a Karpenter NodePool with a benchmark-driven
+instance-type list, for example:
+
+  kubectl apply -f https://raw.githubusercontent.com/SpareCores/sc-karpenter-nodepool/main/config/samples/karpenter_v1alpha1_scnodepool_minimal.yaml
+  kubectl get scnodepools
+
+Check the controller:
+
+  kubectl -n {{ .Release.Namespace }} rollout status deployment/{{ include "sckn.fullname" . }}
+  kubectl -n {{ .Release.Namespace }} logs deployment/{{ include "sckn.fullname" . }}
+{{- if .Values.nodeClassRefOverride }}
+
+WARNING: nodeClassRefOverride is set. Every generated NodePool references
+{{ .Values.nodeClassRefOverride }} instead of the nodeClassRef of its SCNodePool.
+This is a test mode; unset it on a real cluster.
+{{- end }}
