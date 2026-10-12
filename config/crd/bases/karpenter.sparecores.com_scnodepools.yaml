@@ -1,0 +1,909 @@
+---
+apiVersion: apiextensions.k8s.io/v1
+kind: CustomResourceDefinition
+metadata:
+  annotations:
+    controller-gen.kubebuilder.io/version: v0.22.0
+  name: scnodepools.karpenter.sparecores.com
+spec:
+  group: karpenter.sparecores.com
+  names:
+    kind: SCNodePool
+    listKind: SCNodePoolList
+    plural: scnodepools
+    singular: scnodepool
+  scope: Cluster
+  versions:
+  - additionalPrinterColumns:
+    - jsonPath: .status.nodePoolName
+      name: NodePool
+      type: string
+    - jsonPath: .status.provider
+      name: Provider
+      type: string
+    - jsonPath: .status.selected.count
+      name: Types
+      type: integer
+    - jsonPath: .status.conditions[?(@.type=="Ready")].status
+      name: Ready
+      type: string
+    - jsonPath: .status.lastRefreshTime
+      name: Last refresh
+      type: date
+    - jsonPath: .metadata.creationTimestamp
+      name: Age
+      type: date
+    name: v1alpha1
+    schema:
+      openAPIV3Schema:
+        description: |-
+          SCNodePool selects instance types from Spare Cores data and generates a
+          Karpenter NodePool from them. Cluster-scoped; the generated NodePool has the
+          same name.
+        properties:
+          apiVersion:
+            description: |-
+              APIVersion defines the versioned schema of this representation of an object.
+              Servers should convert recognized schemas to the latest internal value, and
+              may reject unrecognized values.
+              More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#resources
+            type: string
+          kind:
+            description: |-
+              Kind is a string value representing the REST resource this object represents.
+              Servers may infer this from the endpoint the client submits requests to.
+              Cannot be updated.
+              In CamelCase.
+              More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#types-kinds
+            type: string
+          metadata:
+            type: object
+          spec:
+            description: spec defines the desired state of SCNodePool
+            properties:
+              churn:
+                default: {}
+                description: |-
+                  churn limits how fast instance types are removed from the NodePool
+                  (removing a type drifts every running node of that type).
+                properties:
+                  maxRemovalsPerRefresh:
+                    default: 3
+                    description: |-
+                      maxRemovalsPerRefresh caps the removals of one refresh (types the
+                      provider no longer offers are exempt).
+                    format: int32
+                    minimum: 0
+                    type: integer
+                  removeAfterRefreshes:
+                    default: 2
+                    description: |-
+                      removeAfterRefreshes: the number of consecutive refreshes a type must
+                      fail before it is removed.
+                    format: int32
+                    minimum: 0
+                    type: integer
+                  removeMarginPercent:
+                    default: 5
+                    description: |-
+                      removeMarginPercent: a type is removed only if it fails the selection
+                      by more than this percentage of the failing threshold (or is no longer
+                      offered at all).
+                    minimum: 0
+                    type: number
+                type: object
+              deletionPolicy:
+                default: Delete
+                description: |-
+                  deletionPolicy decides what happens to the NodePool when this object is
+                  deleted.
+                enum:
+                - Delete
+                - Orphan
+                type: string
+              dryRun:
+                default: false
+                description: |-
+                  dryRun computes and reports the selection in status without ever
+                  creating or updating the NodePool.
+                type: boolean
+              nodePoolTemplate:
+                description: nodePoolTemplate is the template of the generated Karpenter
+                  NodePool.
+                properties:
+                  metadata:
+                    description: |-
+                      metadata holds the labels and annotations of the NodePool object
+                      (not of the nodes).
+                    properties:
+                      annotations:
+                        additionalProperties:
+                          type: string
+                        type: object
+                      labels:
+                        additionalProperties:
+                          type: string
+                        type: object
+                    type: object
+                  spec:
+                    description: |-
+                      spec is a karpenter.sh/v1 NodePoolSpec, verbatim. It is deliberately
+                      untyped so that every provider's NodePool schema version is accepted
+                      (for example EKS Auto Mode adds fields and enum values). The controller
+                      validates it at runtime with a server-side dry run against the
+                      cluster's NodePool CRD. template.spec.nodeClassRef is required and
+                      selects the provider adapter.
+                    type: object
+                    x-kubernetes-preserve-unknown-fields: true
+                required:
+                - spec
+                type: object
+              ranking:
+                description: |-
+                  ranking keeps only the best families of the candidates that passed the
+                  selector. Without ranking, every candidate is emitted.
+                properties:
+                  band:
+                    description: |-
+                      band keeps the families whose objective is within a percentage of the
+                      best family's.
+                    properties:
+                      withinPercent:
+                        description: 'withinPercent: keep families within this percentage
+                          of the best.'
+                        maximum: 100
+                        minimum: 0
+                        type: number
+                    required:
+                    - withinPercent
+                    type: object
+                  families:
+                    description: families bounds the number of kept families.
+                    properties:
+                      max:
+                        description: max keeps at most this many families, even if
+                          more are inside the band.
+                        format: int32
+                        minimum: 1
+                        type: integer
+                      min:
+                        default: 1
+                        description: |-
+                          min widens the band until at least this many families are kept (the
+                          capacity floor).
+                        format: int32
+                        minimum: 1
+                        type: integer
+                    type: object
+                    x-kubernetes-validations:
+                    - message: min must not exceed max
+                      rule: '!has(self.min) || !has(self.max) || self.min <= self.max'
+                  normalize:
+                    default: None
+                    description: normalize is applied to the score before the objective.
+                    enum:
+                    - None
+                    - PerVcpu
+                    type: string
+                  objective:
+                    default: Score
+                    description: objective is what the ranking optimises.
+                    enum:
+                    - Score
+                    - ScorePerPrice
+                    - Price
+                    type: string
+                  score:
+                    description: score is what to rank by.
+                    properties:
+                      benchmark:
+                        description: BenchmarkRef identifies one Spare Cores benchmark.
+                        properties:
+                          config:
+                            description: |-
+                              config is a JSON object. Required when the benchmark has more than one
+                              config; validated against Keeper's benchmark_configs by comparing
+                              parsed objects.
+                            type: object
+                            x-kubernetes-preserve-unknown-fields: true
+                          id:
+                            description: id is a benchmark_id, for example geekbench:score.
+                            maxLength: 128
+                            minLength: 1
+                            type: string
+                        required:
+                        - id
+                        type: object
+                      workloadProfile:
+                        description: WorkloadProfileName is one of the Spare Cores
+                          compound workload benchmarks.
+                        enum:
+                        - web
+                        - compute
+                        - cache
+                        - data_analysis
+                        - llm
+                        - cicd
+                        type: string
+                    type: object
+                    x-kubernetes-validations:
+                    - message: set exactly one of benchmark and workloadProfile
+                      rule: has(self.benchmark) != has(self.workloadProfile)
+                required:
+                - score
+                type: object
+                x-kubernetes-validations:
+                - message: ranking needs band or families.max
+                  rule: has(self.band) || (has(self.families) && has(self.families.max))
+              refresh:
+                default: {}
+                description: refresh controls how often the selection is re-evaluated.
+                properties:
+                  interval:
+                    default: 24h
+                    description: |-
+                      interval is the re-evaluation period, at least one hour. Spec changes
+                      re-evaluate immediately, as does a new value of the annotation
+                      karpenter.sparecores.com/refresh-requested.
+                    maxLength: 32
+                    pattern: ^([0-9]+(\.[0-9]+)?(ns|us|µs|ms|s|m|h))+$
+                    type: string
+                    x-kubernetes-validations:
+                    - message: refresh.interval must be at least 1h
+                      rule: duration(self) >= duration('1h')
+                type: object
+              selector:
+                description: |-
+                  selector filters the Spare Cores candidates. All fields are optional;
+                  without a selector every candidate that passes the provider's
+                  eligibility filter is emitted.
+                properties:
+                  accelerator:
+                    description: AcceleratorSelector selects on GPUs and TPUs (Spare
+                      Cores "accelerators").
+                    properties:
+                      count:
+                        description: |-
+                          count is inclusive and may be fractional (vGPU slices). max: 0 selects
+                          servers without any accelerator.
+                        properties:
+                          max:
+                            minimum: 0
+                            type: number
+                          min:
+                            minimum: 0
+                            type: number
+                        type: object
+                        x-kubernetes-validations:
+                        - message: min must not exceed max
+                          rule: '!has(self.min) || !has(self.max) || self.min <= self.max'
+                      manufacturers:
+                        description: manufacturers are Spare Cores values (NVIDIA,
+                          AMD, Habana, Google, ...).
+                        items:
+                          maxLength: 64
+                          type: string
+                        maxItems: 16
+                        type: array
+                      memoryPerDevice:
+                        description: 'memoryPerDevice: memory of the smallest accelerator,
+                          lower bound.'
+                        properties:
+                          minGiB:
+                            minimum: 0
+                            type: number
+                        type: object
+                      memoryTotal:
+                        description: 'memoryTotal: memory summed over all accelerators,
+                          lower bound.'
+                        properties:
+                          minGiB:
+                            minimum: 0
+                            type: number
+                        type: object
+                      models:
+                        description: |-
+                          models are exact Spare Cores model strings (L40S, A10G, ...); they are
+                          not normalised across vendors.
+                        items:
+                          maxLength: 64
+                          type: string
+                        maxItems: 64
+                        type: array
+                      types:
+                        description: |-
+                          types restricts the type of the primary accelerator. Unknown types are
+                          excluded when this is set.
+                        items:
+                          description: AcceleratorType is the type of the primary
+                            accelerator of a server.
+                          enum:
+                          - GPU
+                          - TPU
+                          type: string
+                        maxItems: 2
+                        type: array
+                    type: object
+                  architectures:
+                    description: |-
+                      architectures restricts the CPU architecture; intersected with a
+                      kubernetes.io/arch requirement of the template.
+                    items:
+                      description: Architecture is a Kubernetes CPU architecture name.
+                      enum:
+                      - amd64
+                      - arm64
+                      type: string
+                    maxItems: 2
+                    type: array
+                  benchmarks:
+                    description: benchmarks are filters on benchmark scores; entries
+                      are AND-ed.
+                    items:
+                      description: BenchmarkFilter is one filter on a benchmark score.
+                      properties:
+                        config:
+                          description: |-
+                            config is a JSON object. Required when the benchmark has more than one
+                            config; validated against Keeper's benchmark_configs by comparing
+                            parsed objects.
+                          type: object
+                          x-kubernetes-preserve-unknown-fields: true
+                        id:
+                          description: id is a benchmark_id, for example geekbench:score.
+                          maxLength: 128
+                          minLength: 1
+                          type: string
+                        max:
+                          description: |-
+                            max is an inclusive upper bound, for lower-is-better benchmarks
+                            (latencies).
+                          type: number
+                        min:
+                          description: |-
+                            min is an inclusive lower bound on the (normalised) score, for
+                            higher-is-better benchmarks.
+                          type: number
+                        normalize:
+                          default: None
+                          description: normalize selects the score normalisation.
+                          enum:
+                          - None
+                          - PerVcpu
+                          - PerPrice
+                          type: string
+                      required:
+                      - id
+                      type: object
+                      x-kubernetes-validations:
+                      - message: a benchmark entry needs min or max
+                        rule: has(self.min) || has(self.max)
+                      - message: min must not exceed max
+                        rule: '!has(self.min) || !has(self.max) || self.min <= self.max'
+                    maxItems: 32
+                    type: array
+                    x-kubernetes-list-type: atomic
+                  cpu:
+                    description: CPUSelector selects on CPU facts.
+                    properties:
+                      allocations:
+                        description: allocations restricts the CPU allocation class.
+                        items:
+                          description: CPUAllocation is how Spare Cores classifies
+                            the CPU time a type gets.
+                          enum:
+                          - Shared
+                          - Burstable
+                          - Dedicated
+                          type: string
+                        maxItems: 3
+                        type: array
+                      caches:
+                        description: caches filters on cache sizes (lower bounds only).
+                        properties:
+                          l1dPerCoreMinKiB:
+                            minimum: 0
+                            type: number
+                          l1iPerCoreMinKiB:
+                            minimum: 0
+                            type: number
+                          l2PerCoreMinKiB:
+                            minimum: 0
+                            type: number
+                          l3MinMiB:
+                            minimum: 0
+                            type: number
+                          l3TotalMinMiB:
+                            minimum: 0
+                            type: number
+                        type: object
+                      clockSpeedMinGHz:
+                        description: clockSpeedMinGHz is a lower bound on the vendor-reported
+                          clock speed.
+                        minimum: 0
+                        type: number
+                      flags:
+                        description: flags filters on Linux /proc/cpuinfo flag names,
+                          lowercase.
+                        properties:
+                          allOf:
+                            description: 'allOf: every listed flag must be present.'
+                            items:
+                              maxLength: 64
+                              type: string
+                            maxItems: 64
+                            type: array
+                          anyOf:
+                            description: 'anyOf: at least one listed flag must be
+                              present.'
+                            items:
+                              maxLength: 64
+                              type: string
+                            maxItems: 64
+                            type: array
+                          noneOf:
+                            description: 'noneOf: none of the listed flags may be
+                              present.'
+                            items:
+                              maxLength: 64
+                              type: string
+                            maxItems: 64
+                            type: array
+                        type: object
+                      hyperthreading:
+                        description: |-
+                          hyperthreading true selects types with more vCPUs than physical cores
+                          (SMT siblings), false selects one vCPU per physical core. Unset: no
+                          filter.
+                        type: boolean
+                      manufacturers:
+                        description: |-
+                          manufacturers are exact, case-sensitive Spare Cores values (Intel, AMD,
+                          AWS, Ampere, Alibaba, Microsoft, Hygon).
+                        items:
+                          maxLength: 64
+                          type: string
+                        maxItems: 16
+                        type: array
+                    type: object
+                  families:
+                    description: families include/exclude globs on the Spare Cores
+                      family string.
+                    properties:
+                      exclude:
+                        items:
+                          maxLength: 128
+                          type: string
+                        maxItems: 64
+                        type: array
+                      include:
+                        items:
+                          maxLength: 128
+                          type: string
+                        maxItems: 64
+                        type: array
+                    type: object
+                  instanceTypes:
+                    description: |-
+                      instanceTypes include/exclude globs on the instance type name
+                      (server.api_reference).
+                    properties:
+                      exclude:
+                        items:
+                          maxLength: 128
+                          type: string
+                        maxItems: 64
+                        type: array
+                      include:
+                        items:
+                          maxLength: 128
+                          type: string
+                        maxItems: 64
+                        type: array
+                    type: object
+                  memory:
+                    description: MemorySelector selects on memory size, in GiB.
+                    properties:
+                      maxGiB:
+                        minimum: 0
+                        type: number
+                      minGiB:
+                        minimum: 0
+                        type: number
+                      perVcpu:
+                        description: |-
+                          perVcpu bounds the GiB per vCPU (2 = compute-optimised, 4 = general
+                          purpose, 8 = memory-optimised).
+                        properties:
+                          maxGiB:
+                            minimum: 0
+                            type: number
+                          minGiB:
+                            minimum: 0
+                            type: number
+                        type: object
+                        x-kubernetes-validations:
+                        - message: minGiB must not exceed maxGiB
+                          rule: '!has(self.minGiB) || !has(self.maxGiB) || self.minGiB
+                            <= self.maxGiB'
+                    type: object
+                    x-kubernetes-validations:
+                    - message: minGiB must not exceed maxGiB
+                      rule: '!has(self.minGiB) || !has(self.maxGiB) || self.minGiB
+                        <= self.maxGiB'
+                  network:
+                    description: |-
+                      NetworkSelector selects on network bandwidth. Setting a field excludes
+                      every type without a value.
+                    properties:
+                      baselineMinGbps:
+                        description: baselineMinGbps is a lower bound on the guaranteed
+                          bandwidth.
+                        minimum: 0
+                        type: number
+                      peakMinGbps:
+                        description: peakMinGbps is a lower bound on the burst bandwidth.
+                        minimum: 0
+                        type: number
+                    type: object
+                  price:
+                    description: PriceSelector selects on the hourly price in USD.
+                    properties:
+                      basis:
+                        description: |-
+                          basis is the price allocation. Default: Spot if the template's
+                          karpenter.sh/capacity-type requirement allows only spot, otherwise
+                          OnDemand.
+                        enum:
+                        - OnDemand
+                        - Spot
+                        type: string
+                      includeManagedFee:
+                        description: |-
+                          includeManagedFee adds the EKS Auto Mode management fee to prices
+                          before filtering and ranking. Defaults to true on Auto Mode and is
+                          ignored elsewhere.
+                        type: boolean
+                      maxHourly:
+                        description: |-
+                          maxHourly is an inclusive upper bound on the hourly price of the type
+                          in USD, as a decimal string (for example "0.40"). It also caps the node
+                          size.
+                        maxLength: 16
+                        pattern: ^[0-9]+(\.[0-9]+)?$
+                        type: string
+                      maxHourlyPerVcpu:
+                        description: |-
+                          maxHourlyPerVcpu is an inclusive upper bound on the hourly price per
+                          vCPU in USD, as a decimal string.
+                        maxLength: 16
+                        pattern: ^[0-9]+(\.[0-9]+)?$
+                        type: string
+                    type: object
+                  storage:
+                    description: StorageSelector selects on instance-local storage.
+                    properties:
+                      local:
+                        description: LocalStorageSelector selects on the disks bundled
+                          with the instance type.
+                        properties:
+                          countMin:
+                            description: |-
+                              countMin is a lower bound on the number of local disks. 1 is evaluated
+                              as "has local storage" on every vendor; 2 or more needs per-disk data.
+                            format: int32
+                            minimum: 0
+                            type: integer
+                          minGB:
+                            description: minGB is a lower bound on the total local
+                              disk size in GB.
+                            minimum: 0
+                            type: number
+                        type: object
+                    type: object
+                  unbenchmarked:
+                    default: Exclude
+                    description: |-
+                      unbenchmarked decides what happens to candidates that lack a score
+                      needed by a benchmark filter, workload profile or the ranking score.
+                    enum:
+                    - Exclude
+                    - IncludeIfFamilyQualifies
+                    - Include
+                    type: string
+                  vcpus:
+                    description: vcpus are inclusive bounds on the vCPU count.
+                    properties:
+                      max:
+                        format: int32
+                        minimum: 0
+                        type: integer
+                      min:
+                        format: int32
+                        minimum: 0
+                        type: integer
+                    type: object
+                    x-kubernetes-validations:
+                    - message: min must not exceed max
+                      rule: '!has(self.min) || !has(self.max) || self.min <= self.max'
+                  workloadProfiles:
+                    description: |-
+                      workloadProfiles are filters on the compound workload benchmarks;
+                      entries are AND-ed with the benchmarks.
+                    items:
+                      description: |-
+                        WorkloadProfileFilter is a filter on workload_profile:<name>. Scores are
+                        unitless; 1.0 is the fleet-median server.
+                      properties:
+                        min:
+                          description: min is an inclusive lower bound on the (normalised)
+                            score.
+                          minimum: 0
+                          type: number
+                        name:
+                          description: WorkloadProfileName is one of the Spare Cores
+                            compound workload benchmarks.
+                          enum:
+                          - web
+                          - compute
+                          - cache
+                          - data_analysis
+                          - llm
+                          - cicd
+                          type: string
+                        normalize:
+                          default: None
+                          description: normalize selects the score normalisation.
+                          enum:
+                          - None
+                          - PerVcpu
+                          - PerPrice
+                          type: string
+                      required:
+                      - min
+                      - name
+                      type: object
+                    maxItems: 8
+                    type: array
+                    x-kubernetes-list-type: atomic
+                type: object
+            required:
+            - nodePoolTemplate
+            type: object
+          status:
+            description: status defines the observed state of SCNodePool
+            properties:
+              conditions:
+                description: |-
+                  conditions: Ready, DataAvailable, SelectionNonEmpty, NodePoolSynced,
+                  NodePoolManaged, NodePoolValid, NodePoolSchedulable, RegionConflict.
+                items:
+                  description: Condition contains details for one aspect of the current
+                    state of this API Resource.
+                  properties:
+                    lastTransitionTime:
+                      description: |-
+                        lastTransitionTime is the last time the condition transitioned from one status to another.
+                        This should be when the underlying condition changed.  If that is not known, then using the time when the API field changed is acceptable.
+                      format: date-time
+                      type: string
+                    message:
+                      description: |-
+                        message is a human readable message indicating details about the transition.
+                        This may be an empty string.
+                      maxLength: 32768
+                      type: string
+                    observedGeneration:
+                      description: |-
+                        observedGeneration represents the .metadata.generation that the condition was set based upon.
+                        For instance, if .metadata.generation is currently 12, but the .status.conditions[x].observedGeneration is 9, the condition is out of date
+                        with respect to the current state of the instance.
+                      format: int64
+                      minimum: 0
+                      type: integer
+                    reason:
+                      description: |-
+                        reason contains a programmatic identifier indicating the reason for the condition's last transition.
+                        Producers of specific condition types may define expected values and meanings for this field,
+                        and whether the values are considered a guaranteed API.
+                        The value should be a CamelCase string.
+                        This field may not be empty.
+                      maxLength: 1024
+                      minLength: 1
+                      pattern: ^[A-Za-z]([A-Za-z0-9_,:]*[A-Za-z0-9_])?$
+                      type: string
+                    status:
+                      description: status of the condition, one of True, False, Unknown.
+                      enum:
+                      - "True"
+                      - "False"
+                      - Unknown
+                      type: string
+                    type:
+                      description: type of condition in CamelCase or in foo.example.com/CamelCase.
+                      maxLength: 316
+                      pattern: ^([a-z0-9]([-a-z0-9]*[a-z0-9])?(\.[a-z0-9]([-a-z0-9]*[a-z0-9])?)*/)?(([A-Za-z0-9][-A-Za-z0-9_.]*)?[A-Za-z0-9])$
+                      type: string
+                  required:
+                  - lastTransitionTime
+                  - message
+                  - reason
+                  - status
+                  - type
+                  type: object
+                type: array
+                x-kubernetes-list-map-keys:
+                - type
+                x-kubernetes-list-type: map
+              dataTimestamp:
+                description: dataTimestamp is the freshness of the Keeper data used.
+                format: date-time
+                type: string
+              excluded:
+                description: excluded counts the candidates dropped by each pipeline
+                  step.
+                properties:
+                  filters:
+                    additionalProperties:
+                      format: int32
+                      type: integer
+                    description: filters counts the candidates dropped by each selector
+                      field.
+                    type: object
+                  missingData:
+                    format: int32
+                    type: integer
+                  providerIneligible:
+                    format: int32
+                    type: integer
+                  ranking:
+                    format: int32
+                    type: integer
+                  templateConstraints:
+                    format: int32
+                    type: integer
+                type: object
+              lastRefreshTime:
+                description: lastRefreshTime is when the selection was last evaluated.
+                format: date-time
+                type: string
+              nodePoolName:
+                description: nodePoolName is the name of the generated NodePool.
+                type: string
+              observedGeneration:
+                description: |-
+                  observedGeneration is the metadata.generation the controller last
+                  processed.
+                format: int64
+                type: integer
+              pendingRemovals:
+                description: |-
+                  pendingRemovals are types that no longer qualify but are kept until the
+                  churn control lets them go.
+                items:
+                  description: PendingRemoval is an instance type waiting to be removed.
+                  properties:
+                    name:
+                      type: string
+                    refreshes:
+                      description: refreshes is the number of consecutive refreshes
+                        it has failed.
+                      format: int32
+                      type: integer
+                    since:
+                      description: since is when the type first failed the selection.
+                      format: date-time
+                      type: string
+                  required:
+                  - name
+                  - refreshes
+                  - since
+                  type: object
+                type: array
+                x-kubernetes-list-map-keys:
+                - name
+                x-kubernetes-list-type: map
+              provider:
+                description: provider is the id of the provider adapter chosen from
+                  the nodeClassRef.
+                type: string
+              regionSource:
+                description: regionSource tells where the regions were detected.
+                enum:
+                - NodeClass
+                - NodeLabels
+                type: string
+              regions:
+                description: regions are the detected Kubernetes region values.
+                items:
+                  type: string
+                type: array
+              selected:
+                description: selected describes the current selection.
+                properties:
+                  band:
+                    description: band reports what the ranking applied.
+                    properties:
+                      lowestKept:
+                        description: lowestKept is the lowest-ranked kept family.
+                        type: string
+                      lowestKeptDeltaPercent:
+                        description: lowestKeptDeltaPercent is the distance of lowestKept
+                          from the reference.
+                        type: number
+                      reference:
+                        description: reference is the best family.
+                        type: string
+                      referenceValue:
+                        description: referenceValue is the objective value of the
+                          reference family.
+                        type: number
+                      trimmed:
+                        description: 'trimmed: families.max trimmed the band.'
+                        type: boolean
+                      widened:
+                        description: 'widened: families.min widened the band.'
+                        type: boolean
+                    type: object
+                  count:
+                    description: count is the number of selected instance types.
+                    format: int32
+                    type: integer
+                  families:
+                    description: families are the kept families in rank order.
+                    items:
+                      description: FamilyStatus is one kept family.
+                      properties:
+                        name:
+                          type: string
+                        objective:
+                          description: objective is the family's median objective
+                            value.
+                          type: number
+                        rank:
+                          description: rank starts at 1.
+                          format: int32
+                          type: integer
+                        sizes:
+                          description: sizes is the number of selected sizes.
+                          format: int32
+                          type: integer
+                      required:
+                      - name
+                      - rank
+                      - sizes
+                      type: object
+                    type: array
+                  instanceTypes:
+                    description: instanceTypes are the selected types with their score
+                      and price.
+                    items:
+                      description: InstanceTypeStatus is one selected instance type.
+                      properties:
+                        family:
+                          type: string
+                        name:
+                          type: string
+                        price:
+                          description: price is the hourly USD price on the price
+                            basis.
+                          type: number
+                        score:
+                          description: score is the ranking score, when ranking is
+                            configured.
+                          type: number
+                      required:
+                      - name
+                      type: object
+                    type: array
+                required:
+                - count
+                type: object
+            type: object
+        required:
+        - spec
+        type: object
+    served: true
+    storage: true
+    subresources:
+      status: {}

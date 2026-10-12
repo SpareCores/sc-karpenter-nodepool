@@ -1,0 +1,18 @@
+# Build output
+bin/
+dist/
+cover.out
+*.test
+*.exe
+
+# Go workspace file
+go.work
+
+# Editors
+.idea
+.vscode
+*.swp
+*~
+
+# Kubeconfigs may contain secrets
+*.kubeconfig

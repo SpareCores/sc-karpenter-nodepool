@@ -1,0 +1,26 @@
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: manager-role
+rules:
+- apiGroups:
+  - karpenter.sparecores.com
+  resources:
+  - scnodepools
+  verbs:
+  - create
+  - delete
+  - get
+  - list
+  - patch
+  - update
+  - watch
+- apiGroups:
+  - karpenter.sparecores.com
+  resources:
+  - scnodepools/status
+  verbs:
+  - get
+  - patch
+  - update

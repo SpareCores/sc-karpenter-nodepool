@@ -1,0 +1,8 @@
+# Allow-list: only what the manager image build needs.
+**
+!go.mod
+!go.sum
+!cmd/**
+!api/**
+!internal/**
+**/*_test.go

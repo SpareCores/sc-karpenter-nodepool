@@ -1,0 +1,5 @@
+## Append samples of your project ##
+resources:
+- karpenter_v1alpha1_scnodepool_web-fast.yaml
+- karpenter_v1alpha1_scnodepool_minimal.yaml
+# +kubebuilder:scaffold:manifestskustomizesamples

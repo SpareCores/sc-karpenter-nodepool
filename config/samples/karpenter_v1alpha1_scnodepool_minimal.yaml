@@ -1,0 +1,14 @@
+# The smallest valid SCNodePool: every selector, ranking, refresh and churn
+# setting is optional (defaults apply), only the NodePool template is required.
+apiVersion: karpenter.sparecores.com/v1alpha1
+kind: SCNodePool
+metadata:
+  name: minimal
+spec:
+  nodePoolTemplate:
+    spec:
+      template:
+        spec:
+          nodeClassRef: {group: karpenter.k8s.aws, kind: EC2NodeClass, name: default}
+      disruption:
+        consolidateAfter: 1m

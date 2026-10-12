@@ -1,0 +1,73 @@
+# The example of docs/reference/selectors.md ("The spec.selector and
+# spec.ranking API") with a nodePoolTemplate added, which that page omits.
+apiVersion: karpenter.sparecores.com/v1alpha1
+kind: SCNodePool
+metadata:
+  name: selectors-example
+spec:
+  nodePoolTemplate:
+    spec:
+      template:
+        spec:
+          nodeClassRef: {group: karpenter.k8s.aws, kind: EC2NodeClass, name: default}
+      disruption:
+        consolidateAfter: 1m
+  selector:
+    instanceTypes: {include: ["*"], exclude: ["*.metal*"]}   # globs on api_reference
+    families: {include: [], exclude: ["t*"]}                 # globs on SC family
+    vcpus: {min: 2, max: 16}
+    architectures: [amd64, arm64]
+    cpu:
+      manufacturers: [AMD, AWS, Intel]
+      allocations: [Dedicated]
+      clockSpeedMinGHz: 3.0
+      hyperthreading: false             # true: SMT on; false: one vCPU per core
+      flags:
+        allOf: [avx2]
+        anyOf: []
+        noneOf: []
+      caches:
+        l2PerCoreMinKiB: 2048
+        l3MinMiB: 32
+    memory:
+      minGiB: 4
+      maxGiB: 64
+      perVcpu: {minGiB: 2, maxGiB: 8}
+    accelerator:
+      count: {min: 0, max: 0}           # no GPU/TPU at all
+      types: [GPU]                      # GPU | TPU
+      memoryPerDevice: {minGiB: 16}
+      memoryTotal: {minGiB: 24}
+      manufacturers: [NVIDIA]
+      models: [L4, L40S]
+    network:
+      baselineMinGbps: 10
+      peakMinGbps: 25
+    storage:
+      local: {minGB: 200, countMin: 1}
+    price:
+      basis: OnDemand                   # OnDemand | Spot; default from capacity-type
+      maxHourly: "0.40"
+      maxHourlyPerVcpu: "0.05"
+      includeManagedFee: true           # EKS Auto Mode only; default true there
+    benchmarks:
+      - id: static_web:rps-extrapolated
+        config: {connections_per_vcpus: 8.0, size: "1k"}
+        min: 20000
+        normalize: None                 # None | PerVcpu | PerPrice
+      - id: passmark:memory_latency
+        max: 60                         # lower is better
+    workloadProfiles:
+      - name: web
+        min: 1.5
+    unbenchmarked: Exclude              # Exclude | IncludeIfFamilyQualifies | Include
+  ranking:
+    score:
+      workloadProfile: web              # or: benchmark: {id, config}
+    objective: Score                    # Score | ScorePerPrice | Price
+    normalize: None                     # None | PerVcpu
+    band:
+      withinPercent: 12                 # families within 12% of the best family
+    families:
+      min: 3                            # widen the band until at least 3 families
+      max: 6                            # never more than 6 families

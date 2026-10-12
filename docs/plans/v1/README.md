@@ -25,7 +25,7 @@ Execution protocol:
 | # | file | status | milestone | depends on |
 |---|---|---|---|---|
 | 00 | `wip/00-overview.md` | reference | features, API, selectors, provider discovery, testing strategy | — |
-| 01 | `wip/01-scaffold.md` | todo | dev container, kubebuilder project, `SCNodePool` API + CRD, CI | 00 |
+| 01 | `done/01-scaffold.md` | done | dev container, kubebuilder project, `SCNodePool` API + CRD, CI | 00 |
 | 02 | `wip/02-keeper-and-selection.md` | todo | Keeper client, snapshot replay, selectors, ranking, churn | 01 |
 | 03 | `wip/03-provider-adapters.md` | todo | provider adapters, eligibility, region detection, requirement rules | 02 |
 | 04 | `wip/04-controller.md` | todo | reconcile, NodePool render/validate/apply, status, health, metrics | 03 |

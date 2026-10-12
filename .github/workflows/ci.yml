@@ -1,0 +1,58 @@
+name: CI
+
+# Runs the gates of docs/plans/v1/CONVENTIONS.md inside the dev container, the
+# same way a developer does with hack/dev.sh.
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  gates:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          persist-credentials: false
+
+      - uses: docker/setup-buildx-action@v4
+
+      # hack/dev.sh looks for an image tagged with the hash of the Dockerfile;
+      # build exactly that tag here (with a GitHub Actions layer cache) so the
+      # script finds it and does not rebuild.
+      - name: Compute dev image tag
+        id: dev-image
+        run: echo "tag=sc-karpenter-nodepool-dev:$(sha256sum hack/devcontainer/Dockerfile | cut -c1-12)" >> "$GITHUB_OUTPUT"
+
+      - name: Build dev image
+        uses: docker/build-push-action@v7
+        with:
+          context: hack/devcontainer
+          file: hack/devcontainer/Dockerfile
+          tags: ${{ steps.dev-image.outputs.tag }}
+          load: true
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - name: Generated code and CRDs are up to date
+        run: |
+          hack/dev.sh make generate manifests
+          git add -N .
+          git diff --exit-code
+
+      - name: Lint
+        run: hack/dev.sh make lint
+
+      - name: Test
+        run: hack/dev.sh make test
+
+      - name: Lint workflows and scripts
+        run: hack/dev.sh bash -c 'actionlint && shellcheck hack/*.sh'
