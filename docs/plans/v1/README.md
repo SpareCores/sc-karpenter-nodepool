@@ -28,7 +28,7 @@ Execution protocol:
 | 01 | `done/01-scaffold.md` | done | dev container, kubebuilder project, `SCNodePool` API + CRD, CI | 00 |
 | 02 | `done/02-keeper-and-selection.md` | done | Keeper client, snapshot replay, selectors, ranking, churn | 01 |
 | 03 | `done/03-provider-adapters.md` | done | provider adapters, eligibility, region detection, requirement rules | 02 |
-| 04 | `wip/04-controller.md` | todo | reconcile, NodePool render/validate/apply, status, health, metrics | 03 |
+| 04 | `done/04-controller.md` | done | reconcile, NodePool render/validate/apply, status, health, metrics | 03 |
 | 05 | `wip/05-local-test-lanes.md` | todo | L2 CRD admission matrix + L3 KWOK e2e (core version matrix) in CI | 04 |
 | 06 | `wip/06-aws-e2e.md` | todo | L5 AWS e2e workflow + sweeper (written and validated, not run) | 05 |
 | 07 | `wip/07-packaging.md` | todo | Helm chart, release workflow, how-to guides, tutorial | 04 |

@@ -32,6 +32,7 @@ func TestRequirementRules(t *testing.T) {
 		forceZones       bool
 		warnZone         bool
 		neverEmitOS      bool
+		legacyCore       bool // core <= v1.8 (§5.2)
 		templateBothOK   bool // template allowing on-demand and spot
 		templateSpotOK   bool
 		templateReserved bool
@@ -42,13 +43,13 @@ func TestRequirementRules(t *testing.T) {
 			templateBothOK: true, templateSpotOK: true, templateReserved: true},
 		{id: Azure, allowed: onDemandSpot, archs: bothArchs, templateBothOK: true, templateSpotOK: true},
 		{id: GCP, allowed: onDemandSpot, archs: bothArchs, templateBothOK: true, templateSpotOK: true},
-		{id: AlicloudACK, allowed: onDemandSpot, single: true, archs: bothArchs, templateSpotOK: true},
+		{id: AlicloudACK, allowed: onDemandSpot, single: true, archs: bothArchs, legacyCore: true, templateSpotOK: true},
 		{id: AlicloudCloudpilot, allowed: onDemandSpot, archs: bothArchs, singleArch: true, warnZone: true,
-			templateBothOK: true, templateSpotOK: true},
+			legacyCore: true, templateBothOK: true, templateSpotOK: true},
 		{id: Hcloud, allowed: onDemandOnly, archs: bothArchs},
 		{id: HcloudItsh, allowed: onDemandOnly, archs: amd64Only},
 		{id: UpCloud, allowed: onDemandOnly, archs: amd64Only},
-		{id: OVH, allowed: onDemandOnly, archs: amd64Only, forceZones: true},
+		{id: OVH, allowed: onDemandOnly, archs: amd64Only, forceZones: true, legacyCore: true},
 		{id: Vultr, allowed: onDemandOnly, archs: amd64Only},
 	}
 	for _, c := range cases {
@@ -68,6 +69,9 @@ func TestRequirementRules(t *testing.T) {
 			}
 			if slices.Contains(r.NeverEmit, LabelOS) != c.neverEmitOS || (!c.neverEmitOS && len(r.NeverEmit) > 0) {
 				t.Errorf("never emit %v", r.NeverEmit)
+			}
+			if r.LegacyCore != c.legacyCore {
+				t.Errorf("legacy core %v", r.LegacyCore)
 			}
 
 			if got, err := r.ResolveCapacityTypes(nil); err != nil || !slices.Equal(got, []string{CapacityTypeOnDemand}) {

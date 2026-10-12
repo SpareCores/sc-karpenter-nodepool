@@ -83,6 +83,9 @@ type Adapter interface {
 	ID() ID
 	// Vendor is the Keeper vendor id.
 	Vendor() string
+	// NodeClass returns the nodeClassRef group and kind of the adapter (for
+	// discovering whether its NodeClass CRD is installed, and RBAC).
+	NodeClass() (group, kind string)
 	// Matches reports whether a nodeClassRef group and kind, with the served
 	// version of the NodeClass CRD, belong to this adapter.
 	Matches(group, kind, servedVersion string) bool

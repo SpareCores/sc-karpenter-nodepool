@@ -197,6 +197,13 @@ func TestOptions(t *testing.T) {
 		t.Error("includeManagedFee without fees must be ignored")
 	}
 
+	// The template's instance-type constraint counts as a template constraint.
+	res = evalSynth(t, spec, cands, Options{InstanceTypeAllowed: func(n string) bool { return n != "d.large" }})
+	if got := res.Names(); !slices.Equal(got, []string{"a.large", "b.large", "c.large"}) ||
+		res.Excluded.TemplateConstraints != 1 || res.Misses["d.large"].Reason != ReasonTemplateConstraints {
+		t.Errorf("instance-type constraint: %v %+v", got, res.Excluded)
+	}
+
 	// Spot basis default from the template; no spot prices: nothing priced.
 	res = evalSynth(t, specOf(nil), cands, Options{DefaultBasis: v1alpha1.PriceBasisSpot})
 	if res.Basis != v1alpha1.PriceBasisSpot || len(res.InstanceTypes) != 0 || res.Excluded.MissingData != 4 {

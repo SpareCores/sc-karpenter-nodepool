@@ -1,0 +1,44 @@
+apiVersion: karpenter.sh/v1
+kind: NodePool
+metadata:
+  annotations:
+    karpenter.sparecores.com/data-timestamp: "2026-10-05T10:02:57Z"
+    karpenter.sparecores.com/selection-hash: 787ecd42a23d81bc
+  labels:
+    app.kubernetes.io/managed-by: sc-karpenter-nodepool
+    karpenter.sparecores.com/scnodepool: sc-ovh
+  name: sc-ovh
+  ownerReferences:
+  - apiVersion: karpenter.sparecores.com/v1alpha1
+    blockOwnerDeletion: true
+    controller: true
+    kind: SCNodePool
+    name: sc-ovh
+    uid: 00000000-0000-4000-8000-000000000001
+spec:
+  disruption:
+    consolidateAfter: 0s
+  template:
+    spec:
+      nodeClassRef:
+        group: karpenter.ovhcloud.sh
+        kind: OVHNodeClass
+        name: default
+      requirements:
+      - key: kubernetes.io/arch
+        operator: In
+        values:
+        - amd64
+      - key: karpenter.sh/capacity-type
+        operator: In
+        values:
+        - on-demand
+      - key: topology.kubernetes.io/zone
+        operator: In
+        values:
+        - gra11-a
+      - key: node.kubernetes.io/instance-type
+        operator: In
+        values:
+        - b3-8
+        - c3-4

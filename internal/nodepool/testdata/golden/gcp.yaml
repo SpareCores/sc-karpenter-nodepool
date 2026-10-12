@@ -1,0 +1,40 @@
+apiVersion: karpenter.sh/v1
+kind: NodePool
+metadata:
+  annotations:
+    karpenter.sparecores.com/data-timestamp: "2026-10-05T10:02:57Z"
+    karpenter.sparecores.com/selection-hash: 5dbaf0e330278112
+  labels:
+    app.kubernetes.io/managed-by: sc-karpenter-nodepool
+    karpenter.sparecores.com/scnodepool: sc-gcp
+  name: sc-gcp
+  ownerReferences:
+  - apiVersion: karpenter.sparecores.com/v1alpha1
+    blockOwnerDeletion: true
+    controller: true
+    kind: SCNodePool
+    name: sc-gcp
+    uid: 00000000-0000-4000-8000-000000000001
+spec:
+  disruption:
+    consolidateAfter: 0s
+  template:
+    spec:
+      nodeClassRef:
+        group: karpenter.k8s.gcp
+        kind: GCENodeClass
+        name: default
+      requirements:
+      - key: kubernetes.io/arch
+        operator: In
+        values:
+        - amd64
+      - key: karpenter.sh/capacity-type
+        operator: In
+        values:
+        - on-demand
+      - key: node.kubernetes.io/instance-type
+        operator: In
+        values:
+        - c3-standard-4
+        - n2d-standard-2

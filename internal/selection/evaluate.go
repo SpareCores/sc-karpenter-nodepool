@@ -34,6 +34,10 @@ type Options struct {
 	// Architectures is the template's kubernetes.io/arch constraint (nil:
 	// none).
 	Architectures []v1alpha1.Architecture
+	// InstanceTypeAllowed is the template's node.kubernetes.io/instance-type
+	// constraint (nil: none). Types it rejects count as template
+	// constraints.
+	InstanceTypeAllowed func(name string) bool
 }
 
 // Result is the outcome of Evaluate.
@@ -166,7 +170,8 @@ func Evaluate(spec *v1alpha1.SCNodePoolSpec, candidates []*Candidate, opts Optio
 			res.Excluded.ProviderIneligible++
 			res.Misses[c.Name()] = Miss{Reason: ReasonProviderIneligible, NotOffered: true, Relative: math.Inf(1)}
 			continue
-		case opts.Architectures != nil && !slices.Contains(opts.Architectures, c.Architecture):
+		case opts.Architectures != nil && !slices.Contains(opts.Architectures, c.Architecture),
+			opts.InstanceTypeAllowed != nil && !opts.InstanceTypeAllowed(c.Name()):
 			res.Excluded.TemplateConstraints++
 			res.Misses[c.Name()] = Miss{Reason: ReasonTemplateConstraints, Relative: math.Inf(1)}
 			continue

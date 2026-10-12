@@ -1,0 +1,22 @@
+# Minimal stand-in for the AWS provider's EC2NodeClass CRD: schemaless, no
+# status subresource (tests write status.subnets directly).
+apiVersion: apiextensions.k8s.io/v1
+kind: CustomResourceDefinition
+metadata:
+  name: ec2nodeclasses.karpenter.k8s.aws
+spec:
+  group: karpenter.k8s.aws
+  names:
+    kind: EC2NodeClass
+    listKind: EC2NodeClassList
+    plural: ec2nodeclasses
+    singular: ec2nodeclass
+  scope: Cluster
+  versions:
+    - name: v1
+      served: true
+      storage: true
+      schema:
+        openAPIV3Schema:
+          type: object
+          x-kubernetes-preserve-unknown-fields: true

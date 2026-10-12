@@ -40,6 +40,9 @@ func TestDetect(t *testing.T) {
 		if a.ID() != c.want || a.Vendor() != c.vendor {
 			t.Errorf("%s/%s: got %s (%s), want %s (%s)", c.group, c.kind, a.ID(), a.Vendor(), c.want, c.vendor)
 		}
+		if g, k := a.NodeClass(); g != c.group || k != c.kind {
+			t.Errorf("%s: NodeClass() = %s/%s", c.want, g, k)
+		}
 		seen[a.ID()] = true
 		if got, ok := registry.Get(c.want); !ok || got.ID() != c.want {
 			t.Errorf("Get(%s) = %v, %v", c.want, got, ok)

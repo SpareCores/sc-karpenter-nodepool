@@ -145,11 +145,58 @@ const (
 	ConditionRegionConflict = "RegionConflict"
 )
 
-// Reasons used by the controller on the Ready condition (more are added with
-// the reconciler).
+// Reasons of the Ready condition (and of the step condition they concern).
+// Every reason except Ready and DryRun keeps the last applied NodePool
+// unchanged.
 const (
-	// ReasonNotImplemented is set by the inert reconciler of the scaffold.
-	ReasonNotImplemented = "NotImplemented"
+	// ReasonReady: the NodePool is applied and healthy.
+	ReasonReady = "Ready"
+	// ReasonDryRun: the selection was computed; dryRun never applies it.
+	ReasonDryRun = "DryRun"
+	// ReasonInvalidTemplate: nodePoolTemplate cannot be parsed, or uses a
+	// requirement key the provider forbids.
+	ReasonInvalidTemplate = "InvalidTemplate"
+	// ReasonInvalidSpec: the selector or ranking is invalid in a way the
+	// CRD schema cannot express.
+	ReasonInvalidSpec = "InvalidSpec"
+	// ReasonUnsupportedProvider: no adapter for the template's nodeClassRef.
+	ReasonUnsupportedProvider = "UnsupportedProvider"
+	// ReasonCapacityTypeUnsupported: the template asks for capacity types
+	// the provider cannot launch.
+	ReasonCapacityTypeUnsupported = "CapacityTypeUnsupported"
+	// ReasonArchitectureUnsupported: the template or the selection needs
+	// architectures the provider cannot launch (together).
+	ReasonArchitectureUnsupported = "ArchitectureUnsupported"
+	// ReasonNameConflict: a NodePool of the same name exists and is not
+	// labelled as generated from this SCNodePool.
+	ReasonNameConflict = "NameConflict"
+	// ReasonNodeClassRefImmutable: the template changes nodeClassRef group
+	// or kind of the existing NodePool.
+	ReasonNodeClassRefImmutable = "NodeClassRefImmutable"
+	// ReasonRegionPending: no region source has a value yet.
+	ReasonRegionPending = "RegionPending"
+	// ReasonRegionUnknown: a detected region is not in Spare Cores.
+	ReasonRegionUnknown = "RegionUnknown"
+	// ReasonDataStale: Keeper (or the provider price list) is unreachable.
+	ReasonDataStale = "DataStale"
+	// ReasonUnknownBenchmarkConfig: a benchmark or config is not in Keeper.
+	ReasonUnknownBenchmarkConfig = "UnknownBenchmarkConfig"
+	// ReasonNoCandidates: the selection is empty (or does not intersect the
+	// template's instance-type list).
+	ReasonNoCandidates = "NoCandidates"
+	// ReasonValidationFailed: the rendered NodePool fails validation.
+	ReasonValidationFailed = "ValidationFailed"
+	// ReasonNodePoolRejected: the server-side dry run rejected the NodePool.
+	ReasonNodePoolRejected = "NodePoolRejected"
+	// ReasonApplyFailed: applying the NodePool failed.
+	ReasonApplyFailed = "ApplyFailed"
+	// ReasonNodePoolNotManaged: no Karpenter controller manages the NodePool.
+	ReasonNodePoolNotManaged = "NodePoolNotManaged"
+	// ReasonNodePoolInvalid: Karpenter reports ValidationSucceeded=False.
+	ReasonNodePoolInvalid = "NodePoolInvalid"
+	// ReasonNodePoolUnschedulable: Karpenter reports
+	// NoCompatibleInstanceTypes for the NodePool.
+	ReasonNodePoolUnschedulable = "NodePoolUnschedulable"
 )
 
 // ---------------------------------------------------------------------------

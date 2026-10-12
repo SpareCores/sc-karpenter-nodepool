@@ -58,6 +58,10 @@ type RequirementRules struct {
 	WarnOnZoneRequirement bool
 	// NeverEmit are requirement keys the generator must never emit.
 	NeverEmit []string
+	// LegacyCore: the provider pins Karpenter core v1.8 or older (overview
+	// §5.1.3), which has no Gte/Lte operators and also restricts the
+	// kubernetes.io and k8s.io label domains.
+	LegacyCore bool
 }
 
 // ResolveCapacityTypes returns the karpenter.sh/capacity-type values to emit

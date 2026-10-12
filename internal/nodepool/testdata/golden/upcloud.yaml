@@ -1,0 +1,40 @@
+apiVersion: karpenter.sh/v1
+kind: NodePool
+metadata:
+  annotations:
+    karpenter.sparecores.com/data-timestamp: "2026-10-05T10:02:57Z"
+    karpenter.sparecores.com/selection-hash: 83a76774f0834adb
+  labels:
+    app.kubernetes.io/managed-by: sc-karpenter-nodepool
+    karpenter.sparecores.com/scnodepool: sc-upcloud
+  name: sc-upcloud
+  ownerReferences:
+  - apiVersion: karpenter.sparecores.com/v1alpha1
+    blockOwnerDeletion: true
+    controller: true
+    kind: SCNodePool
+    name: sc-upcloud
+    uid: 00000000-0000-4000-8000-000000000001
+spec:
+  disruption:
+    consolidateAfter: 0s
+  template:
+    spec:
+      nodeClassRef:
+        group: karpenter.k8s.upcloud
+        kind: UpCloudNodeClass
+        name: default
+      requirements:
+      - key: kubernetes.io/arch
+        operator: In
+        values:
+        - amd64
+      - key: karpenter.sh/capacity-type
+        operator: In
+        values:
+        - on-demand
+      - key: node.kubernetes.io/instance-type
+        operator: In
+        values:
+        - CLOUDNATIVE-2xCPU-4GB
+        - DEV-1xCPU-2GB

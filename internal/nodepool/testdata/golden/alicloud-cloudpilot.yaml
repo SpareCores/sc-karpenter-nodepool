@@ -1,0 +1,40 @@
+apiVersion: karpenter.sh/v1
+kind: NodePool
+metadata:
+  annotations:
+    karpenter.sparecores.com/data-timestamp: "2026-10-05T10:02:57Z"
+    karpenter.sparecores.com/selection-hash: b685d58f95a5a142
+  labels:
+    app.kubernetes.io/managed-by: sc-karpenter-nodepool
+    karpenter.sparecores.com/scnodepool: sc-alicloud-cloudpilot
+  name: sc-alicloud-cloudpilot
+  ownerReferences:
+  - apiVersion: karpenter.sparecores.com/v1alpha1
+    blockOwnerDeletion: true
+    controller: true
+    kind: SCNodePool
+    name: sc-alicloud-cloudpilot
+    uid: 00000000-0000-4000-8000-000000000001
+spec:
+  disruption:
+    consolidateAfter: 0s
+  template:
+    spec:
+      nodeClassRef:
+        group: karpenter.k8s.alibabacloud
+        kind: ECSNodeClass
+        name: default
+      requirements:
+      - key: kubernetes.io/arch
+        operator: In
+        values:
+        - arm64
+      - key: karpenter.sh/capacity-type
+        operator: In
+        values:
+        - on-demand
+      - key: node.kubernetes.io/instance-type
+        operator: In
+        values:
+        - ecs.c8y.xlarge
+        - ecs.g8y.large

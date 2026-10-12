@@ -47,8 +47,9 @@ type adapter struct {
 	managedFee     bool
 }
 
-func (a *adapter) ID() ID         { return a.id }
-func (a *adapter) Vendor() string { return a.vendor }
+func (a *adapter) ID() ID                          { return a.id }
+func (a *adapter) Vendor() string                  { return a.vendor }
+func (a *adapter) NodeClass() (group, kind string) { return a.group, a.kind }
 
 func (a *adapter) Matches(group, kind, servedVersion string) bool {
 	if group != a.group || kind != a.kind {
@@ -186,6 +187,7 @@ func builtin() []*adapter {
 				DefaultCapacityType: CapacityTypeOnDemand, AllowedCapacityTypes: onDemandSpot,
 				SingleCapacityType:   true,
 				AllowedArchitectures: bothArchs,
+				LegacyCore:           true,
 			},
 		},
 		{
@@ -196,6 +198,7 @@ func builtin() []*adapter {
 				DefaultCapacityType: CapacityTypeOnDemand, AllowedCapacityTypes: onDemandSpot,
 				AllowedArchitectures: bothArchs, SingleArchitecture: true,
 				WarnOnZoneRequirement: true,
+				LegacyCore:            true,
 			},
 		},
 		{
@@ -236,6 +239,7 @@ func builtin() []*adapter {
 			requirements: func() RequirementRules {
 				r := pinnedOnDemand(amd64Only)
 				r.ForceZones = true
+				r.LegacyCore = true
 				return r
 			}(),
 		},
