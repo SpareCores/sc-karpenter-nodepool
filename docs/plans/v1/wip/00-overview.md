@@ -953,6 +953,11 @@ in the NodeClass status when readable.
   | benchmark `min` (`normalize: PerVcpu`) | `benchmark_score_per_vcpu_min` | |
   | benchmark `min` (`normalize: PerPrice`) | `benchmark_score_per_price_min` | looser than client-side when the fee is included |
 
+  The controller also always runs one base query per vendor and regions
+  without push-down filters (push-downs ride only on the benchmark queries,
+  loosened by the churn margin). Otherwise a type dropped by a pushed-down
+  filter would look "no longer offered" and escape churn control.
+
   Not pushed down: enum-valued selectors (`cpu.manufacturers`, `cpu.flags`,
   `accelerator.types`, `accelerator.manufacturers`, `accelerator.models`,
   allocations) — Keeper rejects values that

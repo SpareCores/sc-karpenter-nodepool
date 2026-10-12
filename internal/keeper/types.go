@@ -1,0 +1,131 @@
+/*
+This Source Code Form is subject to the terms of the Mozilla Public
+License, v. 2.0. If a copy of the MPL was not distributed with this
+file, You can obtain one at https://mozilla.org/MPL/2.0/.
+*/
+
+// Package keeper is a client of the Spare Cores Keeper API
+// (https://keeper.sparecores.net). It only reads: /servers,
+// /benchmark_configs, /table/region, /table/zone and /healthcheck.
+//
+// Responses are decoded by field name and unknown fields are ignored, so
+// additive schema changes of sc-crawler do not break the client. The decoded
+// schema is sc-crawler 0.10 (accelerator_* instead of gpu_*).
+package keeper
+
+import "time"
+
+// Allocation is Keeper's best_price_allocation: which price a /servers query
+// reports and filters on.
+type Allocation string
+
+const (
+	// AllocationOnDemand reports on-demand prices only.
+	AllocationOnDemand Allocation = "ONDEMAND_ONLY"
+	// AllocationSpot reports spot prices only.
+	AllocationSpot Allocation = "SPOT_ONLY"
+)
+
+// Server is one row of GET /servers. Nullable fields are pointers; units are
+// Spare Cores' own (MiB for memory, KiB for caches, GB for local storage,
+// GHz, Gbps, USD per hour).
+type Server struct {
+	APIReference string  `json:"api_reference"`
+	ServerID     string  `json:"server_id"`
+	VendorID     string  `json:"vendor_id"`
+	Name         string  `json:"name"`
+	DisplayName  string  `json:"display_name"`
+	Description  string  `json:"description"`
+	Family       string  `json:"family"`
+	Series       *string `json:"series"`
+	Status       string  `json:"status"`
+
+	VCPUs           int      `json:"vcpus"`
+	CPUCores        *int     `json:"cpu_cores"`
+	CPUAllocation   string   `json:"cpu_allocation"`
+	CPUArchitecture string   `json:"cpu_architecture"`
+	CPUManufacturer *string  `json:"cpu_manufacturer"`
+	CPUFamily       *string  `json:"cpu_family"`
+	CPUModel        *string  `json:"cpu_model"`
+	CPUSpeed        *float64 `json:"cpu_speed"`
+	CPUFlags        []string `json:"cpu_flags"`
+	CPUL1dCache     *float64 `json:"cpu_l1d_cache"`
+	CPUL1iCache     *float64 `json:"cpu_l1i_cache"`
+	CPUL2Cache      *float64 `json:"cpu_l2_cache"`
+	CPUL3Cache      *float64 `json:"cpu_l3_cache"`
+	CPUL3CacheTotal *float64 `json:"cpu_l3_cache_total"`
+
+	// MemoryAmount is in MiB.
+	MemoryAmount float64 `json:"memory_amount"`
+
+	AcceleratorCount        float64  `json:"accelerator_count"`
+	AcceleratorType         *string  `json:"accelerator_type"`
+	AcceleratorFamily       *string  `json:"accelerator_family"`
+	AcceleratorManufacturer *string  `json:"accelerator_manufacturer"`
+	AcceleratorModel        *string  `json:"accelerator_model"`
+	AcceleratorMemoryMin    *float64 `json:"accelerator_memory_min"`
+	AcceleratorMemoryTotal  *float64 `json:"accelerator_memory_total"`
+
+	NetworkSpeedBaseline *float64 `json:"network_speed_baseline"`
+	NetworkSpeedMax      *float64 `json:"network_speed_max"`
+
+	// StorageSize is the total bundled local disk in GB (0: none).
+	StorageSize float64   `json:"storage_size"`
+	Storages    []Storage `json:"storages"`
+
+	// Price is the cheapest price of the query's allocation in the queried
+	// regions (USD per hour).
+	Price            *float64 `json:"price"`
+	MinPrice         *float64 `json:"min_price"`
+	MinPriceOnDemand *float64 `json:"min_price_ondemand"`
+	MinPriceSpot     *float64 `json:"min_price_spot"`
+
+	// SelectedBenchmarkScore is the score of the queried benchmark_id and
+	// benchmark_config, nil when the server has none.
+	SelectedBenchmarkScore *float64 `json:"selected_benchmark_score"`
+}
+
+// Storage is one local disk of a server.
+type Storage struct {
+	Size        float64 `json:"size"`
+	StorageType string  `json:"storage_type"`
+}
+
+// BenchmarkConfig is one row of GET /benchmark_configs. Config is the
+// canonical JSON string Keeper matches exactly.
+type BenchmarkConfig struct {
+	BenchmarkID string  `json:"benchmark_id"`
+	Config      string  `json:"config"`
+	Category    string  `json:"category"`
+	Subcategory *string `json:"subcategory"`
+}
+
+// Region is one row of GET /table/region.
+type Region struct {
+	VendorID     string   `json:"vendor_id"`
+	RegionID     string   `json:"region_id"`
+	APIReference string   `json:"api_reference"`
+	Name         string   `json:"name"`
+	DisplayName  string   `json:"display_name"`
+	Aliases      []string `json:"aliases"`
+	CountryID    string   `json:"country_id"`
+	Status       string   `json:"status"`
+}
+
+// Zone is one row of GET /table/zone.
+type Zone struct {
+	VendorID     string `json:"vendor_id"`
+	RegionID     string `json:"region_id"`
+	ZoneID       string `json:"zone_id"`
+	APIReference string `json:"api_reference"`
+	Name         string `json:"name"`
+	DisplayName  string `json:"display_name"`
+	Status       string `json:"status"`
+}
+
+// Health is the subset of GET /healthcheck the controller uses: the hash and
+// update time of the Spare Cores database Keeper serves.
+type Health struct {
+	DatabaseHash        string
+	DatabaseLastUpdated time.Time
+}

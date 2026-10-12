@@ -26,7 +26,7 @@ Execution protocol:
 |---|---|---|---|---|
 | 00 | `wip/00-overview.md` | reference | features, API, selectors, provider discovery, testing strategy | — |
 | 01 | `done/01-scaffold.md` | done | dev container, kubebuilder project, `SCNodePool` API + CRD, CI | 00 |
-| 02 | `wip/02-keeper-and-selection.md` | todo | Keeper client, snapshot replay, selectors, ranking, churn | 01 |
+| 02 | `done/02-keeper-and-selection.md` | done | Keeper client, snapshot replay, selectors, ranking, churn | 01 |
 | 03 | `wip/03-provider-adapters.md` | todo | provider adapters, eligibility, region detection, requirement rules | 02 |
 | 04 | `wip/04-controller.md` | todo | reconcile, NodePool render/validate/apply, status, health, metrics | 03 |
 | 05 | `wip/05-local-test-lanes.md` | todo | L2 CRD admission matrix + L3 KWOK e2e (core version matrix) in CI | 04 |
