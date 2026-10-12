@@ -1,8 +1,17 @@
 {
-  "fetched_at": "2026-10-12T14:31:46+00:00",
+  "eks_automode_fees": {
+    "file": "aws/eks-automode-fees.json.gz",
+    "publication_date": "2026-09-28T19:42:55Z",
+    "region": "us-east-1",
+    "rows": 1180,
+    "sha256": "fc6b51e4cbf93f9cff79e7e4762e4adecb695fc08df5a5c725881a65b147599a",
+    "url": "https://pricing.us-east-1.amazonaws.com/offers/v1.0/aws/AmazonEKS/current/us-east-1/index.json",
+    "version": "20260928194255"
+  },
+  "fetched_at": "2026-10-12T15:35:27+00:00",
   "keeper": {
-    "database_hash": "16ceb09ec5d0635010402a1c5157935309b28bac",
-    "database_last_updated": "2026-10-12T13:05:42+00:00",
+    "database_hash": "dd8b95c247cffcbe33e74cdf853ce926c47e151b",
+    "database_last_updated": "2026-10-12T15:16:38+00:00",
     "packages": {
       "sparecores-crawler": "0.10.0",
       "sparecores-data": "0.5.1",
