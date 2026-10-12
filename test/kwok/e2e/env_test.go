@@ -206,13 +206,47 @@ func deleteAndWait(t *testing.T, pool string, deployments ...string) {
 	deleteAndWaitOpt(t, pool, false, deployments...)
 }
 
+// cleanupTimeout is how long a scenario's teardown may take before leftovers
+// are forced out. A normal teardown takes seconds; slow CI runners and core
+// v1.2 (whose stuck NodeClaims need the nudge below) get more room.
+func cleanupTimeout() time.Duration {
+	if coreMinor == "v1.2" {
+		return 6 * time.Minute
+	}
+	return 4 * time.Minute
+}
+
+// stuckAfter is how long a NodeClaim may be terminating before the cleanup
+// deletes the nodes of its pool itself.
+//
+// Core v1.2's KWOK provider implements Delete as a delete of the NodeClaim
+// (not of the node) and then waits for the node to disappear. Karpenter
+// deletes the node first only for a registered NodeClaim, so a NodeClaim that
+// is deleted before its node registered (the drift loop replaces claims every
+// few seconds, and the teardown can hit one just launched) waits for a node
+// nobody deletes, forever. Deleting the node releases it.
+const stuckAfter = 30 * time.Second
+
+// forceGrace is how long the cleanup keeps waiting after it stripped the
+// finalizers of leftovers.
+const forceGrace = time.Minute
+
 // deleteAndWaitOpt is deleteAndWait; reapOrphans also deletes the nodes left
 // behind once the NodePool and its NodeClaims are gone. KWOK creates a node
 // some time after Karpenter asks for it, so a NodeClaim that is replaced at
 // once (the drift loop) can be deleted before its node appears, which then
 // belongs to nobody.
+//
+// The order matters for a pool whose NodeClaims are replaced all the time:
+// the load goes first (no pending pods, nothing to replace for), then the
+// SCNodePool and the NodePool, so Karpenter creates no new NodeClaims, and
+// only then the NodeClaims that are left. If the teardown still does not
+// finish within cleanupTimeout, the NodeClaims and nodes of the pool are
+// released from their finalizers (logged) as a last resort, so one stuck
+// scenario does not fail on, or poison, what follows it.
 func deleteAndWaitOpt(t *testing.T, pool string, reapOrphans bool, deployments ...string) {
 	t.Helper()
+	selector := client.MatchingLabels{labelNodePool: pool}
 	for _, d := range deployments {
 		dep := &appsv1.Deployment{ObjectMeta: metav1.ObjectMeta{Name: d, Namespace: namespace}}
 		err := k8s.Delete(ctx(), dep, client.PropagationPolicy(metav1.DeletePropagationForeground))
@@ -224,15 +258,38 @@ func deleteAndWaitOpt(t *testing.T, pool string, reapOrphans bool, deployments .
 	if err := k8s.Delete(ctx(), p); err != nil && !apierrors.IsNotFound(err) {
 		t.Errorf("deleting SCNodePool %s: %v", pool, err)
 	}
-	deadline := time.Now().Add(4 * time.Minute)
-	for time.Now().Before(deadline) {
+
+	start := time.Now()
+	deadline := start.Add(cleanupTimeout())
+	forced := false
+	for {
+		// Do not rely on the garbage collector alone: delete the NodePool and
+		// its NodeClaims directly (all are no-ops once they are gone).
+		if np, err := getNodePool(pool); err == nil && np.GetDeletionTimestamp() == nil {
+			_ = k8s.Delete(ctx(), np)
+		}
+		claimObjs := newClaimList()
+		_ = k8s.List(ctx(), claimObjs, selector)
+		for i := range claimObjs.Items {
+			if claimObjs.Items[i].GetDeletionTimestamp() == nil {
+				_ = k8s.Delete(ctx(), &claimObjs.Items[i])
+			}
+		}
 		_, npErr := getNodePool(pool)
-		claims, _ := listClaims(pool)
 		var nodes corev1.NodeList
-		_ = k8s.List(ctx(), &nodes, client.MatchingLabels{labelNodePool: pool})
+		_ = k8s.List(ctx(), &nodes, selector)
+		if stuck := stuckClaims(claimObjs); len(stuck) > 0 {
+			for i := range nodes.Items {
+				if nodes.Items[i].DeletionTimestamp == nil {
+					t.Logf("NodeClaims %v are terminating for more than %s: deleting node %s",
+						stuck, stuckAfter, nodes.Items[i].Name)
+					_ = k8s.Delete(ctx(), &nodes.Items[i])
+				}
+			}
+		}
 		var pods corev1.PodList
 		_ = k8s.List(ctx(), &pods, client.InNamespace(namespace))
-		gone := apierrors.IsNotFound(npErr) && len(claims) == 0 && len(pods.Items) == 0
+		gone := apierrors.IsNotFound(npErr) && len(claimObjs.Items) == 0 && len(pods.Items) == 0
 		if gone && reapOrphans {
 			for i := range nodes.Items {
 				t.Logf("deleting orphaned node %s", nodes.Items[i].Name)
@@ -240,9 +297,69 @@ func deleteAndWaitOpt(t *testing.T, pool string, reapOrphans bool, deployments .
 			}
 		}
 		if gone && len(nodes.Items) == 0 {
+			t.Logf("cleanup of %s took %s", pool, time.Since(start).Round(time.Second))
 			return
+		}
+		if time.Now().After(deadline) {
+			if forced {
+				t.Errorf("NodePool %s, its NodeClaims, nodes or the load pods are still there after the cleanup timeout "+
+					"(%d NodeClaims, %d nodes, %d pods, NodePool: %v)",
+					pool, len(claimObjs.Items), len(nodes.Items), len(pods.Items), npErr)
+				return
+			}
+			forced = true
+			deadline = time.Now().Add(forceGrace)
+			t.Logf("cleanup of %s still incomplete after %s (NodePool: %v, %d NodeClaims, %d nodes, %d pods): "+
+				"removing finalizers", pool, time.Since(start).Round(time.Second), npErr,
+				len(claimObjs.Items), len(nodes.Items), len(pods.Items))
+			releaseLeftovers(t, claimObjs, &nodes)
 		}
 		time.Sleep(time.Second)
 	}
-	t.Errorf("NodePool %s, its NodeClaims, nodes or the load pods are still there after the cleanup timeout", pool)
+}
+
+// stuckClaims returns the names of the NodeClaims that have been terminating
+// for longer than stuckAfter.
+func stuckClaims(claims *unstructured.UnstructuredList) []string {
+	var out []string
+	for i := range claims.Items {
+		if ts := claims.Items[i].GetDeletionTimestamp(); ts != nil && time.Since(ts.Time) > stuckAfter {
+			out = append(out, claims.Items[i].GetName())
+		}
+	}
+	return out
+}
+
+// releaseLeftovers strips the finalizers of the NodeClaims and nodes a
+// scenario left behind, and deletes them, logging every object it touches.
+func releaseLeftovers(t *testing.T, claims *unstructured.UnstructuredList, nodes *corev1.NodeList) {
+	t.Helper()
+	release := func(obj client.Object, kind string) {
+		if len(obj.GetFinalizers()) > 0 {
+			t.Logf("force-removing finalizers %v of %s %s (deleting since %v)",
+				obj.GetFinalizers(), kind, obj.GetName(), obj.GetDeletionTimestamp())
+			patch := client.MergeFrom(obj.DeepCopyObject().(client.Object))
+			obj.SetFinalizers(nil)
+			if err := k8s.Patch(ctx(), obj, patch); err != nil && !apierrors.IsNotFound(err) {
+				t.Logf("releasing %s %s: %v", kind, obj.GetName(), err)
+			}
+		}
+		if err := k8s.Delete(ctx(), obj); err != nil && !apierrors.IsNotFound(err) {
+			t.Logf("deleting %s %s: %v", kind, obj.GetName(), err)
+		}
+	}
+	for i := range claims.Items {
+		release(&claims.Items[i], "NodeClaim")
+	}
+	for i := range nodes.Items {
+		release(&nodes.Items[i], "node")
+	}
+	// Pods of the scenario's load that are stuck on a node that is gone.
+	var pods corev1.PodList
+	_ = k8s.List(ctx(), &pods, client.InNamespace(namespace))
+	for i := range pods.Items {
+		pod := &pods.Items[i]
+		t.Logf("force-deleting pod %s (node %q, phase %s)", pod.Name, pod.Spec.NodeName, pod.Status.Phase)
+		_ = k8s.Delete(ctx(), &pods.Items[i], client.GracePeriodSeconds(0))
+	}
 }
