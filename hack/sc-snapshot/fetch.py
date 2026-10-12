@@ -76,7 +76,10 @@ def get(path: str, params: dict | None = None, retries: int = 5):
                 return json.loads(body)
         except urllib.error.HTTPError as exc:
             if exc.code in (429, 500, 502, 503, 504) and attempt < retries - 1:
-                time.sleep(2 ** attempt * 5)
+                # Keeper sends Retry-After (seconds) with 429 responses
+                retry_after = exc.headers.get("Retry-After")
+                delay = int(retry_after) if retry_after and retry_after.isdigit() else 2 ** attempt * 5
+                time.sleep(delay)
                 continue
             raise SystemExit(f"GET {url} failed: HTTP {exc.code}: {exc.read()[:500]!r}")
         except urllib.error.URLError as exc:

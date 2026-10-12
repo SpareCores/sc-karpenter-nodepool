@@ -306,10 +306,11 @@ semantics, coverage and caveats:
 | CPU caches | `cpu.caches.{l1d,l1i,l2}PerCoreMinKiB`, `cpu.caches.l3MinMiB`, `cpu.caches.l3TotalMinMiB` | `cpu_l1d_cache`, `cpu_l1i_cache`, `cpu_l2_cache`, `cpu_l3_cache`, `cpu_l3_cache_total` | `{l2PerCoreMinKiB: 2048, l3MinMiB: 32}` | Cache sizes as seen by the VM (L3 is shared) |
 | Memory | `memory.minGiB` / `.maxGiB` | `memory_amount` | `{minGiB: 8}` | Memory bounds |
 | Memory | `memory.perVcpu.minGiB` / `.maxGiB` | `memory_amount / vcpus` | `{minGiB: 4}` | Memory-to-CPU ratio |
-| GPU | `gpu.count.min` / `.max` | `gpu_count` | `{max: 0}` | GPU count; `max: 0` = CPU-only |
-| GPU | `gpu.memoryPerGpu.minGiB` | `gpu_memory_min` | `{minGiB: 40}` | Memory of the smallest GPU |
-| GPU | `gpu.memoryTotal.minGiB` | `gpu_memory_total` | `{minGiB: 80}` | Sum of GPU memory |
-| GPU | `gpu.manufacturers`, `gpu.models` | `gpu_manufacturer`, `gpu_model` | `models: [L40S, H100]` | Exact SC values |
+| Accelerators | `accelerator.count.min` / `.max` | `accelerator_count` | `{max: 0}` | GPU/TPU count; `max: 0` = none |
+| Accelerators | `accelerator.types` | `accelerator_type` (derived where missing) | `[GPU]` | `GPU` / `TPU` |
+| Accelerators | `accelerator.memoryPerDevice.minGiB` | `accelerator_memory_min` | `{minGiB: 40}` | Memory of the smallest accelerator |
+| Accelerators | `accelerator.memoryTotal.minGiB` | `accelerator_memory_total` | `{minGiB: 80}` | Sum of accelerator memory |
+| Accelerators | `accelerator.manufacturers`, `accelerator.models` | `accelerator_manufacturer`, `accelerator_model` | `models: [L40S, H100]` | Exact SC values |
 | Network | `network.baselineMinGbps` / `.peakMinGbps` | `network_speed_baseline` / `network_speed_max` | `{baselineMinGbps: 10}` | Bandwidth; curated data, mainly AWS, OVH, Alibaba (baseline) |
 | Local storage | `storage.local.minGB` / `.countMin` | `storage_size` / `storages` | `{minGB: 200}` | Bundled instance-local disk |
 | Price | `price.basis` | `server_price.allocation` | `OnDemand` | Which price filters/ranking use |
@@ -757,7 +758,7 @@ case-insensitively), so the mapping is always exact.
 - The template NodeClass must leave `spec.plan` empty (otherwise the list
   collapses to one plan).
 - Exclude `vbm-*` (bare metal, never listed) and `vcg-*` (GPU, listed but no GPU
-  resources advertised; also stored with `gpu_count` 0 in SC).
+  resources advertised).
 - amd64 and on-demand only. No ICE fallback cache.
 - Adapter: vendor `vultr`; region from the NodeClass `spec.region`.
 
@@ -790,7 +791,7 @@ row of §5.3.
 | all | SC architectures `i386`, `arm64_mac`, `x86_64_mac`; rows without a price for the basis in the target regions |
 | `aws-auto` | types without an Auto Mode SKU in the region's AWS price list |
 | `azure` | the static exclusions in §5.4 |
-| `gcp` | rows without an on-demand price (proxy for the provider's price file) |
+| `gcp` | rows without an on-demand price (proxy for the provider's price file); TPU types (accelerator type `TPU`, derived as in the selector reference) |
 | `alicloud-*` | rows without an on-demand price |
 | `hcloud-itsh`, `upcloud`, `ovh`, `vultr` | `arm64` |
 | `ovh` | GPU flavors (unless the user explicitly selects GPUs), `bm-*`, `d2-2` |
@@ -870,15 +871,16 @@ in the NodeClass status when readable.
   | `storage.local.minGB` | `storage_size` | |
   | `storage.local.countMin` (≥ 2 only) | `storage_count_min` | `countMin: 1` is sent as `storage_size=1` (GB) instead, as Keeper counts per-disk entries, which four vendors lack |
   | `memory.perVcpu.minGiB` / `.maxGiB` | `memory_per_vcpu_min` / `memory_per_vcpu_max` | |
-  | `gpu.count.min` / `.max` | `gpu_min` / `gpu_max` | `gpu_max=0` = CPU-only |
-  | `gpu.memoryPerGpu.minGiB`, `gpu.memoryTotal.minGiB` | `gpu_memory_min`, `gpu_memory_total` | |
+  | `accelerator.count.min` / `.max` | `gpu_min` / `gpu_max` | Keeper kept the `gpu_*` parameter names; they filter on `accelerator_*` (TPUs included). `gpu_max=0` = no accelerator |
+  | `accelerator.memoryPerDevice.minGiB`, `accelerator.memoryTotal.minGiB` | `gpu_memory_min`, `gpu_memory_total` | |
   | `price.maxHourly` | `price_max` (with `currency=USD`) | applies to the region-scoped price of the basis; without the Auto Mode fee, so looser than the client-side check when the fee is included |
   | benchmark `min` / `max` (`normalize: None`) | `benchmark_score_min` / `benchmark_score_max` | only on that benchmark's query |
   | benchmark `min` (`normalize: PerVcpu`) | `benchmark_score_per_vcpu_min` | |
   | benchmark `min` (`normalize: PerPrice`) | `benchmark_score_per_price_min` | looser than client-side when the fee is included |
 
   Not pushed down: enum-valued selectors (`cpu.manufacturers`, `cpu.flags`,
-  `gpu.manufacturers`, `gpu.models`, allocations) — Keeper rejects values that
+  `accelerator.types`, `accelerator.manufacturers`, `accelerator.models`,
+  allocations) — Keeper rejects values that
   no active server has with HTTP 422, and flags need any-of/none-of — the
   scope globs, and `price.maxHourlyPerVcpu` (no Keeper equivalent). Benchmark thresholds are not pushed down when
   `unbenchmarked` is not `Exclude`, because Keeper drops rows without a score;
@@ -889,8 +891,13 @@ in the NodeClass status when readable.
   responses are cacheable for an hour. Requests are shared across `SCNodePool`s
   with identical parameters within a refresh cycle. An optional API key lifts
   the region limit.
-- On errors: retry with backoff, then keep the last NodePool and set
+- On errors: retry with backoff (on HTTP 429 wait for the `Retry-After`
+  header Keeper sends since October 2026), then keep the last NodePool and set
   `DataAvailable=False`.
+- Keeper responses follow the sc-crawler 0.10 schema (`accelerator_*` instead
+  of `gpu_*`, plus `accelerator_type`, `series`, `api_reference_object`,
+  `compatible_storage_ids`); the client decodes by field name and ignores
+  unknown fields, so additive schema changes do not break it.
 
 ### 7.2 Remaining Keeper limitations (worked around client-side)
 
@@ -899,15 +906,15 @@ in the NodeClass status when readable.
 | `vcpus_min`/`vcpus_max` capped at 256 (kept for the web frontend) | larger bounds only client-side |
 | `cpu_flags` is all-of only; enum parameters reject unknown values | flags and enums only client-side |
 | One `benchmark_id` per query | one query per benchmark used, joined on `api_reference` |
-| Without `benchmark_config`, Keeper aggregates all configs of a benchmark with `MAX(score)` ([queries.py](https://github.com/SpareCores/sc-keeper/blob/7443abe9704cac0ae5b63a8a93dd93ff9acdf92e/src/sc_keeper/queries.py#L133)); a fallback, as scores of different configs are not comparable | always send a config when the benchmark has more than one; with a config there is exactly one score per server (it is part of the primary key) |
+| Without `benchmark_config`, Keeper aggregates all configs of a benchmark with `MAX(score)` ([queries.py](https://github.com/SpareCores/sc-keeper/blob/46a3eb6590c2745d7728ba77b1fa758f14c1f3b6/src/sc_keeper/queries.py#L133)); a fallback, as scores of different configs are not comparable | always send a config when the benchmark has more than one; with a config there is exactly one score per server (it is part of the primary key) |
 | `benchmark_config` is an exact string match | send the canonical string from `/benchmark_configs` |
 | At most 3 regions per anonymous request | chunked queries |
 | `only_orderable` hides servers without a price | fine: unpriced servers are not candidates |
 
-SC data issues found on the way: Graviton `*g-flex` types missing (aws); Vultr
-`vcg-a40-*` stored with `gpu_count` 0; Azure GPU metadata incomplete (21 GPU
-servers without GPU memory, 38 without manufacturer); OVH prices months old;
-Hetzner memory stored as GB × 1000.
+SC data issues found on the way: Graviton `*g-flex` types missing (aws); Azure
+accelerator metadata incomplete (21 GPU servers without memory, 38 without
+manufacturer); `accelerator_type` not yet set for GCP and a few AWS types; OVH
+prices months old; Hetzner memory stored as GB × 1000.
 
 ## 8. Testing
 

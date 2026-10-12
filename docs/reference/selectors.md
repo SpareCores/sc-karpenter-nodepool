@@ -15,7 +15,7 @@ vendor, and the ranking and data-quality rules applied on top.
   - [CPU features](#cpu-features)
   - [CPU caches](#cpu-caches)
   - [Memory](#memory)
-  - [GPU](#gpu)
+  - [Accelerators (GPU, TPU)](#accelerators-gpu-tpu)
   - [Network](#network)
   - [Local storage](#local-storage)
   - [Price](#price)
@@ -121,9 +121,10 @@ spec:
       minGiB: 4
       maxGiB: 64
       perVcpu: {minGiB: 2, maxGiB: 8}
-    gpu:
-      count: {min: 0, max: 0}           # CPU-only
-      memoryPerGpu: {minGiB: 16}
+    accelerator:
+      count: {min: 0, max: 0}           # no GPU/TPU at all
+      types: [GPU]                      # GPU | TPU
+      memoryPerDevice: {minGiB: 16}
       memoryTotal: {minGiB: 24}
       manufacturers: [NVIDIA]
       models: [L4, L40S]
@@ -261,20 +262,32 @@ Read them with care:
 Hetzner stores memory as GB × 1000 MiB (a 4 GB server is 4000 MiB, about 3.9
 GiB). Prefer slightly lower bounds (for example `minGiB: 3.8`) on Hetzner.
 
-### GPU
+### Accelerators (GPU, TPU)
 
-| Field | SC source | Semantics | Coverage (GPU servers only) |
+Since sc-crawler 0.10 (Keeper, October 2026) Spare Cores describes GPUs and
+TPUs alike as *accelerators* (`accelerator_*` fields, formerly `gpu_*`).
+
+| Field | SC source | Semantics | Coverage (servers with accelerators) |
 |---|---|---|---|
-| `gpu.count.min` / `.max` | `server.gpu_count` | Inclusive; a float (fractional vGPU slices exist, for example 0.25). `max: 0` selects CPU-only servers. | 100 everywhere |
-| `gpu.memoryPerGpu.minGiB` | `server.gpu_memory_min` (MiB) | Smallest GPU's memory. | aws 100, azure 55, others 95–100 |
-| `gpu.memoryTotal.minGiB` | `server.gpu_memory_total` (MiB) | Sum over GPUs. | same |
-| `gpu.manufacturers` | `server.gpu_manufacturer` | `NVIDIA`, `AMD`, `Habana`, `Google`. | aws 100, azure 19, alicloud 74, others 100 |
-| `gpu.models` | `server.gpu_model` | Exact SC model strings; **not normalised across vendors** (for example `L40S`, `A10G`, `RTX Pro 6000`, `RTX PRO 6000 Blackwell Server Edition`). | aws 100, azure 55, alicloud 74, others 100 |
+| `accelerator.count.min` / `.max` | `server.accelerator_count` | Inclusive; a float (fractional vGPU slices exist, for example 0.25). `max: 0` selects servers without any accelerator. | 100 everywhere |
+| `accelerator.types` | `server.accelerator_type` (`GPU`, `TPU`) | Type of the primary accelerator. See the derivation rule below. | aws 92, gcp 0 (derived), others 100 |
+| `accelerator.memoryPerDevice.minGiB` | `server.accelerator_memory_min` (MiB) | Memory of the smallest accelerator, ≥. | aws 100, azure 55, gcp 96, upcloud 93, others 100 |
+| `accelerator.memoryTotal.minGiB` | `server.accelerator_memory_total` (MiB) | Sum over accelerators, ≥. | same |
+| `accelerator.manufacturers` | `server.accelerator_manufacturer` | `NVIDIA`, `AMD`, `Habana`, `Google`, … | aws 100, azure 19, gcp 96, alicloud 73, others 100 |
+| `accelerator.models` | `server.accelerator_model` | Exact SC model strings; **not normalised across vendors** (for example `L40S`, `A10G`, `RTX Pro 6000`, `v5e`). | aws 100, azure 55, alicloud 71, others 100 |
 
-GPU model, count and memory are also available as Karpenter labels on AWS and
-Azure; SC adds measured GPU performance (`llm_speed`, `nvbandwidth`, see
-[benchmarks](#benchmarks)). Vultr's only active GPU plan is stored with
-`gpu_count` 0; the Vultr adapter excludes `vcg-*` plans by name.
+`accelerator_type` is not filled for every server yet (none of GCP's, and AWS
+`g4ad` (AMD V520) and `dl1` (Habana) are untyped). The controller therefore
+derives the type: `accelerator_type` if set; otherwise `TPU` when the
+accelerator family is `TPU` (GCP TPUs: manufacturer `Google`, models `v5e`,
+`v5p`, `v6e`, `v7x`); otherwise `GPU` when the manufacturer is `NVIDIA` or
+`AMD`; otherwise unknown, which is excluded whenever `types` is set.
+
+Accelerator model, count and memory are also available as Karpenter labels on
+AWS and Azure; SC adds measured GPU performance (`llm_speed`, `nvbandwidth`, see
+[benchmarks](#benchmarks)). No supported Karpenter provider launches TPUs (the
+GCP adapter drops them), and the Vultr adapter drops GPU plans (`vcg-*`) and
+bare metal (`vbm-*`).
 
 ### Network
 
@@ -376,7 +389,7 @@ server, so `min: 1.5` reads "at least 1.5× the median server".
 | `cicd` | Geekbench clang multi (0.50) and single (0.10), stress-ng multi (0.20), integer, compression, brotli, string sorting (0.05 each) |
 
 Recipes are defined in
-[`sc_crawler/workload_profiles.py`](https://github.com/SpareCores/sc-crawler/blob/85b0ef97d75db97266501e05fb1895ee5baddfa6/src/sc_crawler/workload_profiles.py#L125).
+[`sc_crawler/workload_profiles.py`](https://github.com/SpareCores/sc-crawler/blob/dc0b342625d99bc1312bfe8437d445b7fcfdbc6b/src/sc_crawler/workload_profiles.py#L125).
 
 ### Ranking
 
@@ -464,7 +477,7 @@ needed by a benchmark filter, workload profile or the ranking score:
 | `IncludeIfFamilyQualifies` | Keep an unscored size if at least one scored size of the same family passes every benchmark filter (and, with ranking, the family made the cut). |
 | `Include` | Keep them, ignoring benchmark filters for that type. |
 
-Missing values for any other selector field (CPU manufacturer, flags, GPU
+Missing values for any other selector field (CPU manufacturer, flags, accelerator
 memory) always exclude the candidate when that field is set. The number of
 candidates dropped for missing data is reported in
 `status.excluded.missingData`.
@@ -521,6 +534,8 @@ Deliberately not in v1 (see the overview plan for the rationale):
 - CPU family / model regex, nested virtualisation (`hw_virt`)
 - Memory generation, speed, ECC (mostly AWS-only data)
 - Local storage type (NVMe / SSD / HDD)
+- Hardware series within a family (`series`, new in sc-crawler 0.10; not
+  populated yet)
 - Price per GiB
 - Thresholds relative to a named instance type ("≥ 1.2× `m7i.large`")
 - Boot time (`average_time_to_start`)
@@ -555,12 +570,12 @@ example `8.0` and `8` are equal, `"8"` is not).
 ## References
 
 - Keeper `/servers` implementation:
-  [`sc_keeper/api.py`](https://github.com/SpareCores/sc-keeper/blob/7443abe9704cac0ae5b63a8a93dd93ff9acdf92e/src/sc_keeper/api.py#L414)
+  [`sc_keeper/api.py`](https://github.com/SpareCores/sc-keeper/blob/46a3eb6590c2745d7728ba77b1fa758f14c1f3b6/src/sc_keeper/api.py#L431)
 - Keeper benchmark subquery (exact config match; MAX over configs only when no config is given):
-  [`sc_keeper/queries.py`](https://github.com/SpareCores/sc-keeper/blob/7443abe9704cac0ae5b63a8a93dd93ff9acdf92e/src/sc_keeper/queries.py#L133)
+  [`sc_keeper/queries.py`](https://github.com/SpareCores/sc-keeper/blob/46a3eb6590c2745d7728ba77b1fa758f14c1f3b6/src/sc_keeper/queries.py#L133)
 - `/benchmark_configs`:
-  [`sc_keeper/api.py`](https://github.com/SpareCores/sc-keeper/blob/7443abe9704cac0ae5b63a8a93dd93ff9acdf92e/src/sc_keeper/api.py#L2312)
+  [`sc_keeper/api.py`](https://github.com/SpareCores/sc-keeper/blob/46a3eb6590c2745d7728ba77b1fa758f14c1f3b6/src/sc_keeper/api.py#L2329)
 - Server fields and units:
-  [`sc_crawler/table_bases.py`](https://github.com/SpareCores/sc-crawler/blob/85b0ef97d75db97266501e05fb1895ee5baddfa6/src/sc_crawler/table_bases.py#L632)
+  [`sc_crawler/table_bases.py`](https://github.com/SpareCores/sc-crawler/blob/dc0b342625d99bc1312bfe8437d445b7fcfdbc6b/src/sc_crawler/table_bases.py#L633)
 - Keeper API docs: https://keeper.sparecores.net/docs
 - v1 overview: [`../plans/v1/wip/00-overview.md`](../plans/v1/wip/00-overview.md)
