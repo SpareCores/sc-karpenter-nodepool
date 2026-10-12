@@ -103,6 +103,16 @@ test-kwok-matrix: ## L3 for every core version of test/kwok/core-versions.txt, o
 		KWOK_CORE_VERSION=$$v test/kwok/run.sh || exit 1; \
 	done
 
+# L4 is its own Go module (test/l4: the providers' dependency trees stay out of
+# go.mod) and uses the providers' in-memory cloud fakes and envtest only; it
+# never reaches a cloud endpoint.
+.PHONY: test-l4
+test-l4: ## L4: the real AWS and Azure provider code (pkg/test environments, in-memory fakes, envtest) against generated NodePools.
+	@test -n "$$KUBEBUILDER_ASSETS" || { echo "KUBEBUILDER_ASSETS is not set; run via hack/dev.sh" >&2; exit 1; }
+	mkdir -p test/l4/.out
+	cd test/l4 && go vet ./... && golangci-lint run ./...
+	cd test/l4 && go test -count=1 -timeout 20m -v ./... 2>&1 | tee .out/l4.log
+
 .PHONY: test-chart
 test-chart: ## Helm chart: lint, golden `helm template` output, CRD and RBAC in sync (UPDATE=1 rewrites the golden files).
 	@test -n "$$SCKN_DEV_CONTAINER" || { echo "run via hack/dev.sh" >&2; exit 1; }

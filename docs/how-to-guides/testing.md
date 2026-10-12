@@ -54,7 +54,7 @@ diff before you keep it).
 | L1 unit and envtest | `make test` | every PR | Selection, ranking, churn, requirement building, adapters and the reconciler, against the committed Spare Cores snapshot replayed through a fake Keeper. |
 | L2 CRD matrix | `make test-crd` | every PR | Server-side dry-run of the generated NodePools (and negative cases) against the NodePool CRD each supported provider ships, one kind cluster, under a minute plus downloads. Logs in `test/crd/.out/`. |
 | L3 KWOK | `make test-kwok` | every PR, once per core version | Real scheduling, provisioning, drift and the drift-loop detector with core Karpenter's KWOK provider and per-vendor catalogs built from the snapshot, in kind. About 10 minutes per core version. Logs and catalogs in `test/kwok/.out/<version>/`. |
-| L4 provider tests | not yet | | AWS and Azure in-process provider tests (planned). |
+| L4 provider tests | `make test-l4` | nightly (GitHub workflow), and on demand | The real AWS and Azure provider code launches only from our instance-type lists and stamps every requirement key we emit on its NodeClaims (no drift loop). In-process, with the providers' in-memory cloud fakes and envtest, under a minute plus module downloads. Log in `test/l4/.out/`. See [L4 in detail](#l4-in-detail). |
 | L5 real AWS | manual (GitHub workflow) | | The controller on EKS Auto Mode and on EKS with self-managed Karpenter in a real account: selection, provisioning and drift. About an hour and $0.6-0.8 per run. See [L5 in detail](#l5-in-detail). |
 
 ### L3 in detail
@@ -82,6 +82,41 @@ it. For debugging a failing scenario, `KEEP_CLUSTER=1` plus
 
 On hosts whose Docker root is on ZFS, kubelet cannot start in a kind node; the
 lanes detect that and mount the node's data directories from tmpfs.
+
+### L4 in detail
+
+```bash
+hack/dev.sh make test-l4
+L4_LOG=1 hack/dev.sh bash -c 'cd test/l4 && go test -count=1 -v -run TestDriftControls ./azure/'
+```
+
+`test/l4` is a Go module of its own (it imports `aws/karpenter-provider-aws`
+v1.14.1 and `Azure/karpenter-provider-azure` v1.14.3, and the controller's
+packages through a `replace` to the repository root), so the providers'
+dependency trees stay out of `go.mod`. Each provider package starts the
+provider's own `pkg/test` environment: an envtest API server with the
+provider's CRDs, in-memory EC2/SSM/IAM/pricing (AWS) or Azure API fakes, and the
+real `CloudProvider`. For synthetic `SCNodePool`s over instance types of the
+fakes' catalogs, the tests render the NodePool with `internal/nodepool` and the
+adapter's rules, apply it server-side, run core's NodePool hash, validation and
+readiness controllers, schedule pods with core's provisioner, and check that:
+
+- the types the provider asks the cloud for (EC2 `CreateFleet` overrides,
+  Azure VM sizes) and the launched NodeClaims are within the NodePool's list;
+- every requirement key of the NodePool is a label of each NodeClaim, core's
+  requirement-drift check passes, and core's drift controller (including the
+  provider's `IsDrifted`) finds nothing; removing the launched type does drift
+  it (a positive control), adding a type or refreshing the data does not;
+- provider restrictions match the adapters: capacity types and architectures
+  of the offerings (no `reserved` on Azure), AWS's exotic-type filter, zone
+  pinning by zone ID (AWS) and zone (both), the EKS Auto Mode adapter's keys on
+  the open-source provider, and Azure's static SKU exclusions against the
+  adapter's eligibility filter, SKU by SKU.
+
+Nothing reaches a cloud: the test binaries drop cloud credentials from the
+environment, disable the AWS instance metadata service, and route every
+non-local HTTP request to a local proxy that refuses it and fails the run.
+`L4_LOG=1` turns on the controllers' logs.
 
 ### L5 in detail
 

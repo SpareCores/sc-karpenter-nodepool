@@ -1,0 +1,40 @@
+name: L4 provider tests
+
+# L4 (docs/plans/v1/wip/00-overview.md §8.4): the real AWS and Azure provider
+# code, on their pkg/test environments with in-memory cloud fakes and envtest,
+# against NodePools rendered by the controller. No cloud credentials, no cloud
+# calls (the test binaries refuse every non-local request). Nightly, because
+# the provider modules are large and change on their own schedule.
+on:
+  schedule:
+    - cron: "41 2 * * *"
+  workflow_dispatch:
+
+concurrency:
+  group: l4-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  l4:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          persist-credentials: false
+
+      - uses: ./.github/actions/dev-image
+
+      - name: In-process provider tests (AWS, Azure)
+        run: hack/dev.sh make test-l4
+
+      - name: Upload the log
+        if: failure()
+        uses: actions/upload-artifact@v7
+        with:
+          name: test-l4
+          path: test/l4/.out/
+          if-no-files-found: ignore
