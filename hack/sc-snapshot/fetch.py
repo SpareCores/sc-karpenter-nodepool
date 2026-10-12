@@ -8,6 +8,12 @@ and offline:
   the selector engine);
 - L3 builds the per-vendor KWOK instance-type catalogs from them.
 
+Besides Keeper, it records the EKS Auto Mode management fees of the aws test
+region from the AWS public price list (the AmazonEKS offer file, products with
+eksproducttype=AutoMode) as `aws/eks-automode-fees.json.gz`, an
+{instance type: hourly USD fee} map listed under `eks_automode_fees` in the
+manifest; the Auto Mode adapter uses it as its eligibility list.
+
 Run manually (or via the "Refresh Spare Cores snapshot" workflow, which commits
 the result). The output directory is replaced as a whole. Responses are stored
 gzipped (a full AWS /servers response is ~4.5 MB of JSON, ~250 KB gzipped);
@@ -31,6 +37,7 @@ import urllib.request
 from datetime import datetime, timezone
 
 KEEPER_URL = os.environ.get("KEEPER_URL", "https://keeper.sparecores.net")
+PRICE_LIST_URL = os.environ.get("AWS_PRICE_LIST_URL", "https://pricing.us-east-1.amazonaws.com")
 
 # One test region per vendor (the Kubernetes region value; mapped to Keeper's
 # region_id via /table/region, as GCP and Hetzner region ids are numeric).
@@ -64,6 +71,10 @@ def get(path: str, params: dict | None = None, retries: int = 5):
     url = f"{KEEPER_URL}{path}"
     if params:
         url += "?" + urllib.parse.urlencode(params)
+    return get_url(url, retries)
+
+
+def get_url(url: str, retries: int = 5):
     req = urllib.request.Request(url, headers={"User-Agent": "sc-karpenter-nodepool-snapshot"})
     for attempt in range(retries):
         try:
@@ -103,6 +114,25 @@ def region_id(regions: list[dict], vendor: str, k8s_region: str) -> str:
         if k8s_region in (r["region_id"], r["api_reference"]) or k8s_region in (r.get("aliases") or []):
             return r["region_id"]
     raise SystemExit(f"region {k8s_region} of {vendor} not found in /table/region")
+
+
+def automode_fees(offer: dict) -> dict[str, float]:
+    """Extract {instance type: hourly USD fee} of the Auto Mode products of an
+    AmazonEKS offer file (the same rules as the controller's parser)."""
+    fees = {}
+    terms = offer.get("terms", {}).get("OnDemand", {})
+    for sku, product in offer.get("products", {}).items():
+        attrs = product.get("attributes", {})
+        if attrs.get("eksproducttype") != "AutoMode":
+            continue
+        instance_type = attrs.get("instancetype")
+        dims = [d for term in terms.get(sku, {}).values() for d in term.get("priceDimensions", {}).values()]
+        if not instance_type or len(dims) != 1 or dims[0].get("unit", "").lower() not in ("hours", "hrs"):
+            raise SystemExit(f"unexpected Auto Mode product {sku} in the price list: {product} {dims}")
+        fees[instance_type] = float(dims[0]["pricePerUnit"]["USD"])
+    if not fees:
+        raise SystemExit("the price list has no Auto Mode product")
+    return fees
 
 
 def write(out: str, name: str, data) -> dict:
@@ -157,6 +187,19 @@ def fetch(out: str) -> dict:
     if get("/healthcheck").get("database_hash") != health.get("database_hash"):
         raise SystemExit("Keeper data changed during the fetch, run again")
 
+    aws_region = VENDORS["aws"]["region"]
+    offer_url = f"{PRICE_LIST_URL}/offers/v1.0/aws/AmazonEKS/current/{aws_region}/index.json"
+    offer = get_url(offer_url)
+    fees = automode_fees(offer)
+    eks_automode_fees = {
+        "region": aws_region,
+        "url": offer_url,
+        "publication_date": offer.get("publicationDate"),
+        "version": offer.get("version"),
+        **write(out, "aws/eks-automode-fees", fees),
+        "rows": len(fees),
+    }
+
     return {
         "fetched_at": datetime.now(timezone.utc).isoformat(timespec="seconds"),
         "keeper_url": KEEPER_URL,
@@ -169,6 +212,7 @@ def fetch(out: str) -> dict:
         },
         "vendors": VENDORS,
         "queries": queries,
+        "eks_automode_fees": eks_automode_fees,
     }
 
 
@@ -188,7 +232,8 @@ def main() -> None:
     os.replace(tmp, args.out)
     print(
         f"snapshot of Keeper database {manifest['keeper']['database_hash']} "
-        f"({manifest['keeper']['database_last_updated']}): {len(manifest['queries'])} queries -> {args.out}",
+        f"({manifest['keeper']['database_last_updated']}): {len(manifest['queries'])} queries, "
+        f"{manifest['eks_automode_fees']['rows']} EKS Auto Mode fees -> {args.out}",
         file=sys.stderr,
     )
 

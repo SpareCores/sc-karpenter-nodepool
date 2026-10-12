@@ -185,8 +185,8 @@ Printer columns: NodePool, Provider, Types, Ready, Last refresh.
      the adapter default (always explicit; several providers loop or fail
      without it, §5);
    - `kubernetes.io/arch`: the user's requirement if present, otherwise
-     `In [<architectures of the selected types>]` — except on EKS Auto Mode
-     and providers where §6 says otherwise;
+     `In [<architectures of the selected types>]` (on every provider,
+     including EKS Auto Mode; §6.5 adds single-architecture constraints);
    - zone: none of our own, except where the adapter forces it (OVH) and the
      template has no zone requirement;
    - every other user requirement verbatim.
@@ -562,12 +562,14 @@ case-insensitively), so the mapping is always exact.
   `AmazonEKS` product per Auto Mode-eligible instance type and region
   (`eksproducttype: AutoMode`,
   `https://pricing.us-east-1.amazonaws.com/offers/v1.0/aws/AmazonEKS/current/<region>/index.json`,
-  ~1.4 MB per region; 1,081 types in us-east-2). This list is authoritative
-  per region and also gives the management fee. It matches the documented
-  family allowlist plus the "more than 1 vCPU, not nano/micro/small" rule
-  ([docs](https://docs.aws.amazon.com/eks/latest/userguide/automode-learn-instances.html)).
-  The adapter must drop every type not on the list, otherwise the pool can end
-  up with nothing launchable.
+  ~1.4 MB per region; 1,081 types in us-east-2). It is the authoritative
+  family list per region and also gives the management fee. It does **not**
+  apply the documented size rule: it also prices about 40 one-vCPU types (for
+  example `c6g.medium`, `m7g.medium`), which Auto Mode does not launch. The
+  adapter therefore keeps a type only if it is on the list **and** satisfies
+  "more than 1 vCPU, not nano/micro/small"
+  ([docs](https://docs.aws.amazon.com/eks/latest/userguide/automode-learn-instances.html));
+  otherwise the pool can end up with nothing launchable.
 - Management fee: per instance-hour, median 12% of the on-demand price (4.8%
   for some types), charged regardless of capacity type, so spot savings shrink.
   Added to prices when `price.includeManagedFee` is on (default on Auto Mode).

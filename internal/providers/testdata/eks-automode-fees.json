@@ -1,0 +1,16 @@
+{
+  "c6g.large": 0.008,
+  "c6g.xlarge": 0.016,
+  "c7a.2xlarge": 0.032,
+  "c7i.large": 0.008,
+  "g5.xlarge": 0.016,
+  "i4i.xlarge": 0.016,
+  "m5.2xlarge": 0.032,
+  "m5.large": 0.008,
+  "m5.xlarge": 0.016,
+  "m7g.medium": 0.004,
+  "r7i.4xlarge": 0.064,
+  "r7i.large": 0.008,
+  "t3.large": 0.008,
+  "zz9.large": 0.008
+}

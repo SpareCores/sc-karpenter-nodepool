@@ -14,6 +14,10 @@ file, You can obtain one at https://mozilla.org/MPL/2.0/.
 // parameters are ignored, since the client re-applies every filter. Unknown
 // queries get HTTP 404 with a message naming the closest recorded queries.
 // /healthcheck is synthesised from the manifest.
+//
+// When the snapshot has an EKS Auto Mode fee table (manifest
+// eks_automode_fees), the same server also answers AWS public price list
+// requests for its region (PriceListHandler); without one, they get HTTP 404.
 package keepertest
 
 import (
@@ -47,6 +51,8 @@ type Manifest struct {
 		Spot   bool   `json:"spot"`
 	} `json:"vendors"`
 	Queries []ManifestQuery `json:"queries"`
+	// EKSAutoModeFees is absent in snapshots fetched before it was added.
+	EKSAutoModeFees *FeeFile `json:"eks_automode_fees,omitempty"`
 }
 
 // ManifestQuery is one recorded query.
@@ -101,6 +107,8 @@ type Handler struct {
 	dir      string
 	manifest *Manifest
 	routes   map[string]ManifestQuery
+	// priceList serves the fee table, nil without one.
+	priceList *PriceListHandler
 
 	mu       sync.Mutex
 	bodies   map[string][]byte
@@ -120,6 +128,13 @@ func NewHandler(dir string) (*Handler, error) {
 			values.Set(k, fmt.Sprint(v))
 		}
 		h.routes[routeKey(q.Path, values)] = q
+	}
+	region, fees, ok, err := AutoModeFees(dir, m)
+	if err != nil {
+		return nil, err
+	}
+	if ok {
+		h.priceList = NewPriceListHandler(map[string]map[string]float64{region: fees})
 	}
 	return h, nil
 }
@@ -158,6 +173,14 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	}
 	if r.URL.Path == "/healthcheck" {
 		h.serveHealth(w)
+		return
+	}
+	if strings.HasPrefix(r.URL.Path, priceListPrefix) {
+		if h.priceList == nil {
+			http.Error(w, "keepertest: the snapshot has no EKS Auto Mode fee table", http.StatusNotFound)
+			return
+		}
+		h.priceList.ServeHTTP(w, r)
 		return
 	}
 	key := routeKey(r.URL.Path, r.URL.Query())
