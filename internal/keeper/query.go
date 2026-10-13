@@ -7,6 +7,7 @@ file, You can obtain one at https://mozilla.org/MPL/2.0/.
 package keeper
 
 import (
+	"math"
 	"net/url"
 	"slices"
 	"strconv"
@@ -126,11 +127,14 @@ func (p PushDown) encode(v url.Values) {
 	if p.CPUHyperthreading != nil {
 		v.Set("cpu_hyperthreading", strconv.FormatBool(*p.CPUHyperthreading))
 	}
-	setFloat(v, "cpu_l1d_cache_min", p.CPUL1dCacheMin)
-	setFloat(v, "cpu_l1i_cache_min", p.CPUL1iCacheMin)
-	setFloat(v, "cpu_l2_cache_min", p.CPUL2CacheMin)
-	setFloat(v, "cpu_l3_cache_min", p.CPUL3CacheMin)
-	setFloat(v, "cpu_l3_cache_total_min", p.CPUL3CacheTotalMin)
+	// Keeper takes the cache sizes as integers (KiB); the bounds pushed down
+	// are loosened by the removal margin and rarely whole. Rounding a lower
+	// bound down only returns more rows, which the selection filters again.
+	setFloor(v, "cpu_l1d_cache_min", p.CPUL1dCacheMin)
+	setFloor(v, "cpu_l1i_cache_min", p.CPUL1iCacheMin)
+	setFloor(v, "cpu_l2_cache_min", p.CPUL2CacheMin)
+	setFloor(v, "cpu_l3_cache_min", p.CPUL3CacheMin)
+	setFloor(v, "cpu_l3_cache_total_min", p.CPUL3CacheTotalMin)
 	setFloat(v, "network_speed_baseline_min", p.NetworkSpeedBaselineMin)
 	setFloat(v, "network_speed_max_min", p.NetworkSpeedMaxMin)
 	setFloat(v, "storage_size", p.StorageSizeMin)
@@ -152,6 +156,13 @@ func (p PushDown) encode(v url.Values) {
 func setInt(v url.Values, key string, p *int) {
 	if p != nil {
 		v.Set(key, strconv.Itoa(*p))
+	}
+}
+
+// setFloor sets an integer parameter from a lower bound, rounded down.
+func setFloor(v url.Values, key string, p *float64) {
+	if p != nil {
+		v.Set(key, strconv.FormatFloat(math.Floor(*p), 'f', -1, 64))
 	}
 }
 

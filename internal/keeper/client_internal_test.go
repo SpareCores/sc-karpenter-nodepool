@@ -49,3 +49,17 @@ func TestBenchmarkKeyString(t *testing.T) {
 		t.Errorf("String() = %q", got)
 	}
 }
+
+// Keeper rejects a fractional cache size (int_parsing, HTTP 422); the bounds
+// arrive loosened by the removal margin, for example 1024 KiB less 5%.
+func TestCacheBoundsAreIntegers(t *testing.T) {
+	l2, l3 := 1024*0.95, 32768.0
+	v := Query{Vendor: "aws"}.values([]string{"us-east-2"})
+	PushDown{CPUL2CacheMin: &l2, CPUL3CacheMin: &l3}.encode(v)
+	if got := v.Get("cpu_l2_cache_min"); got != "972" {
+		t.Errorf("cpu_l2_cache_min = %q, want 972", got)
+	}
+	if got := v.Get("cpu_l3_cache_min"); got != "32768" {
+		t.Errorf("cpu_l3_cache_min = %q, want 32768", got)
+	}
+}

@@ -33,6 +33,7 @@ import (
 	"path/filepath"
 	"runtime"
 	"slices"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -162,6 +163,12 @@ func routeKey(path string, values url.Values) string {
 	return path + "?" + strings.Join(parts, "&")
 }
 
+// integerParams are the /servers parameters Keeper declares as integers.
+var integerParams = []string{
+	"vcpus_min", "vcpus_max", "storage_count_min",
+	"cpu_l1d_cache_min", "cpu_l1i_cache_min", "cpu_l2_cache_min", "cpu_l3_cache_min", "cpu_l3_cache_total_min",
+}
+
 func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	h.mu.Lock()
 	h.requests = append(h.requests, r.URL)
@@ -182,6 +189,15 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		}
 		h.priceList.ServeHTTP(w, r)
 		return
+	}
+	// Like Keeper (HTTP 422, int_parsing): these parameters are integers.
+	for _, name := range integerParams {
+		if s := r.URL.Query().Get(name); s != "" {
+			if _, err := strconv.Atoi(s); err != nil {
+				http.Error(w, fmt.Sprintf("keepertest: %s must be an integer, got %q", name, s), http.StatusUnprocessableEntity)
+				return
+			}
+		}
 	}
 	key := routeKey(r.URL.Path, r.URL.Query())
 	q, ok := h.routes[key]
