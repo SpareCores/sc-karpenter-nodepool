@@ -72,6 +72,9 @@ jobs:
           build-args: |
             VERSION=sha-${{ github.sha }}
             COMMIT=${{ github.sha }}
+          # Own scope, so it does not evict the dev-image cache (ci.yml).
+          cache-from: type=gha,scope=manager
+          cache-to: type=gha,mode=max,scope=manager
           provenance: false
 
       # The clusters pull anonymously: fail now, not after 20 minutes of EKS

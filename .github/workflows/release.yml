@@ -116,6 +116,8 @@ jobs:
           build-args: |
             VERSION=${{ needs.verify.outputs.version }}
             COMMIT=${{ github.sha }}
+          cache-from: type=gha,scope=manager
+          cache-to: type=gha,mode=max,scope=manager
           provenance: mode=max
           sbom: true
 

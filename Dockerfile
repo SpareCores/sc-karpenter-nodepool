@@ -1,3 +1,4 @@
+# syntax=docker/dockerfile:1
 # Manager image. Built for the architecture of the build host by default;
 # `make docker-buildx` builds multi-arch images (BUILDPLATFORM runs the Go
 # toolchain natively, the binary is cross-compiled for TARGETARCH).
@@ -11,9 +12,13 @@ ARG COMMIT=
 
 WORKDIR /workspace
 COPY go.mod go.sum ./
+# The modules stay in this layer (no cache mount), so the layer cache, also the
+# GitHub Actions one, skips the download while go.mod is unchanged. The build
+# cache mount only speeds up local rebuilds (the gha cache does not keep mounts).
 RUN go mod download
 COPY . .
-RUN CGO_ENABLED=0 GOOS=${TARGETOS:-linux} GOARCH=${TARGETARCH} \
+RUN --mount=type=cache,target=/root/.cache/go-build \
+    CGO_ENABLED=0 GOOS=${TARGETOS:-linux} GOARCH=${TARGETARCH} \
     go build -trimpath \
       -ldflags="-s -w -X github.com/SpareCores/sc-karpenter-nodepool/internal/version.Version=${VERSION} -X github.com/SpareCores/sc-karpenter-nodepool/internal/version.Commit=${COMMIT}" \
       -o manager ./cmd
