@@ -35,6 +35,7 @@ import (
 	"github.com/SpareCores/sc-karpenter-nodepool/internal/keeper"
 	"github.com/SpareCores/sc-karpenter-nodepool/internal/nodepool"
 	"github.com/SpareCores/sc-karpenter-nodepool/internal/providers"
+	"github.com/SpareCores/sc-karpenter-nodepool/internal/version"
 	// +kubebuilder:scaffold:imports
 )
 
@@ -142,11 +143,20 @@ func main() {
 	flag.StringVar(&nodeClassRefOverride, "node-class-ref-override", envString("SCKN_NODE_CLASS_REF_OVERRIDE", ""),
 		"Test mode only: group/kind/name replacing the nodeClassRef of every generated NodePool "+
 			"(the provider adapter is still chosen from the template). [env SCKN_NODE_CLASS_REF_OVERRIDE]")
+	printVersion := flag.Bool("version", false, "Print the version and exit.")
 	opts := zap.Options{Development: true}
 	opts.BindFlags(flag.CommandLine)
 	flag.Parse()
 
+	if *printVersion {
+		fmt.Println(version.Get().String())
+		return
+	}
+
 	ctrl.SetLogger(zap.New(zap.UseFlagOptions(&opts)))
+	build := version.Get()
+	setupLog.Info("Starting sc-karpenter-nodepool", "version", build.Version, "commit", build.Commit,
+		"modified", build.Modified, "go", build.GoVersion)
 
 	var tlsOpts []func(*tls.Config)
 	if !enableHTTP2 {

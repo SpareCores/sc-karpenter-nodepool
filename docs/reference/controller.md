@@ -42,6 +42,12 @@ variable is ignored and the default applies. The Helm chart sets the flags
 | `--node-class-ref-override` | `SCKN_NODE_CLASS_REF_OVERRIDE` | none | **Test mode only.** `group/kind/name` that replaces the `nodeClassRef` of every generated NodePool; the provider adapter is still chosen from the template. Used by the KWOK lane. |
 | `--zap-devel`, `--zap-encoder`, `--zap-log-level`, `--zap-stacktrace-level`, `--zap-time-encoding` | none | development mode on | Logging, from controller-runtime's zap options. The binary defaults to development mode (console output); the chart turns it off. |
 
+`--version` prints the version (from the git tag the image was built from),
+the commit and the Go version, then exits. The same values are logged at
+start-up and exported as `sc_karpenter_nodepool_build_info`. Development
+builds report `git describe` output (for example `0.1.0-3-gabc1234-dirty`) or
+`dev`.
+
 There is no flag to force the detected region or zone. Pin zones with a
 `topology.kubernetes.io/zone` requirement in the template.
 
@@ -193,6 +199,7 @@ controller-runtime and Go metrics.
 | `sc_karpenter_nodepool_keeper_request_errors_total` | counter | `endpoint` | Keeper requests that failed (transport error or non-2xx). |
 | `sc_karpenter_nodepool_selected_instance_types` | gauge | `scnodepool` | Instance types in the (would-be) NodePool of each SCNodePool. |
 | `sc_karpenter_nodepool_condition` | gauge | `scnodepool`, `type`, `status` | `1` for the current status of a condition type, `0` for the other statuses. |
+| `sc_karpenter_nodepool_build_info` | gauge | `version`, `commit`, `go_version` | Always `1`; identifies the running build. |
 
 A useful alert: `sc_karpenter_nodepool_condition{type="Ready",status="True"} == 0`
 for longer than the refresh interval.

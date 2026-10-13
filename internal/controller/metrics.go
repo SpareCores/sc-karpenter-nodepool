@@ -14,6 +14,8 @@ import (
 	"github.com/prometheus/client_golang/prometheus"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"sigs.k8s.io/controller-runtime/pkg/metrics"
+
+	"github.com/SpareCores/sc-karpenter-nodepool/internal/version"
 )
 
 const (
@@ -48,10 +50,17 @@ var (
 		Name:      "condition",
 		Help:      "Status conditions of each SCNodePool: 1 for the current status of a condition type, 0 for the others.",
 	}, []string{labelSCNodePool, "type", "status"})
+	buildInfo = prometheus.NewGaugeVec(prometheus.GaugeOpts{
+		Namespace: metricsNamespace,
+		Name:      "build_info",
+		Help:      "Always 1; labels identify the running build (version from the git tag).",
+	}, []string{"version", "commit", "go_version"})
 )
 
 func init() {
-	metrics.Registry.MustRegister(refreshDuration, keeperRequests, keeperErrors, selectedTypes, conditionStatus)
+	metrics.Registry.MustRegister(refreshDuration, keeperRequests, keeperErrors, selectedTypes, conditionStatus, buildInfo)
+	info := version.Get()
+	buildInfo.WithLabelValues(info.Version, info.Commit, info.GoVersion).Set(1)
 }
 
 var conditionStatuses = []metav1.ConditionStatus{metav1.ConditionTrue, metav1.ConditionFalse, metav1.ConditionUnknown}

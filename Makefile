@@ -2,6 +2,13 @@
 # run them through it: hack/dev.sh make test
 
 IMG ?= ghcr.io/sparecores/sc-karpenter-nodepool:dev
+# Versions come only from git tags: the release workflow passes the tag,
+# local builds use git describe (for example 0.1.0-3-gabc1234-dirty).
+VERSION ?= $(shell git -c safe.directory='*' describe --tags --always --dirty 2>/dev/null | sed 's/^v//' || echo dev)
+COMMIT ?= $(shell git -c safe.directory='*' rev-parse HEAD 2>/dev/null)
+VERSION_PKG := github.com/SpareCores/sc-karpenter-nodepool/internal/version
+LDFLAGS := -X $(VERSION_PKG).Version=$(VERSION) -X $(VERSION_PKG).Commit=$(COMMIT)
+BUILD_ARGS := --build-arg VERSION=$(VERSION) --build-arg COMMIT=$(COMMIT)
 PLATFORMS ?= linux/amd64,linux/arm64
 CONTAINER_TOOL ?= docker
 
@@ -133,16 +140,16 @@ test-e2e-aws: ## L5 configuration: render the eksctl configs and manifests with 
 
 .PHONY: build
 build: ## Build the manager binary.
-	CGO_ENABLED=0 go build -o bin/manager ./cmd
+	CGO_ENABLED=0 go build -ldflags "$(LDFLAGS)" -o bin/manager ./cmd
 
 .PHONY: docker-build
 docker-build: ## Build the manager image for the host architecture.
-	$(CONTAINER_TOOL) build -t $(IMG) .
+	$(CONTAINER_TOOL) build $(BUILD_ARGS) -t $(IMG) .
 
 # Multi-arch build; add --push (or --load for a single platform) to publish.
 .PHONY: docker-buildx
 docker-buildx: ## Build the manager image for $(PLATFORMS) with buildx and push it.
-	$(CONTAINER_TOOL) buildx build --push --platform=$(PLATFORMS) -t $(IMG) .
+	$(CONTAINER_TOOL) buildx build --push --platform=$(PLATFORMS) $(BUILD_ARGS) -t $(IMG) .
 
 .PHONY: dev-image
 dev-image: ## Build the dev container image (hack/devcontainer/Dockerfile).
