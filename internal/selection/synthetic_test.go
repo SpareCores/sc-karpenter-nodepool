@@ -508,3 +508,27 @@ func TestPlanQueriesMargins(t *testing.T) {
 		t.Errorf("no benchmarks: %+v", qs)
 	}
 }
+
+// Keeper rejects upper bounds of zero (vcpus_max >= 1; memory_max,
+// memory_per_vcpu_max and price_max > 0): they are not pushed down, the
+// client-side filter selects nothing instead.
+func TestPlanQueriesZeroUpperBounds(t *testing.T) {
+	spec := planSpec()
+	spec.Selector.VCPUs = &v1alpha1.IntRange{Max: new(int32(0))}
+	spec.Selector.Memory = &v1alpha1.MemorySelector{MaxGiB: new(0.0), PerVCPU: &v1alpha1.GiBRange{MaxGiB: new(0.0)}}
+	spec.Selector.Price = &v1alpha1.PriceSelector{MaxHourly: "0"}
+	qs, err := PlanQueries(spec, "aws", []string{"us-east-1"}, Options{Catalog: catalog})
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, q := range qs[1:] {
+		p := q.PushDown
+		if p.VCPUsMax != nil || p.MemoryMax != nil || p.MemoryPerVCPUMax != nil || p.PriceMax != nil {
+			t.Errorf("%s: zero upper bounds pushed down: vcpus %v memory %v per vCPU %v price %v",
+				q.Benchmark.ID, p.VCPUsMax, p.MemoryMax, p.MemoryPerVCPUMax, p.PriceMax)
+		}
+		if p.GPUMax == nil || *p.GPUMax != 0 {
+			t.Errorf("%s: gpu_max 0 (no accelerators) must still be sent, got %v", q.Benchmark.ID, p.GPUMax)
+		}
+	}
+}

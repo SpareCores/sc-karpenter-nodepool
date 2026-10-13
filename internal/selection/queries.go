@@ -89,6 +89,16 @@ func floorInt(v float64) int {
 	return int(math.Floor(v + 1e-6))
 }
 
+// positive drops an upper bound of zero or less: Keeper rejects it (HTTP 422,
+// vcpus_max >= 1, memory_max, memory_per_vcpu_max and price_max > 0). Such a
+// bound admits nothing, which the client-side filter applies anyway.
+func positive(v *float64) *float64 {
+	if v == nil || *v <= 0 {
+		return nil
+	}
+	return v
+}
+
 func loosenPtr(v *float64, m float64, dir int) *float64 {
 	if v == nil {
 		return nil
@@ -110,7 +120,7 @@ func (cs *compiled) pushDown(m float64) keeper.PushDown {
 		}
 		if s.VCPUs.Max != nil {
 			hi := int(math.Ceil(*loosen(float64(*s.VCPUs.Max), m, 1)))
-			if hi <= keeperVCPUsLimit {
+			if hi >= 1 && hi <= keeperVCPUsLimit {
 				p.VCPUsMax = &hi
 			}
 		}
@@ -120,10 +130,10 @@ func (cs *compiled) pushDown(m float64) keeper.PushDown {
 	}
 	if mem := s.Memory; mem != nil {
 		p.MemoryMin = loosenPtr(mem.MinGiB, m, -1)
-		p.MemoryMax = loosenPtr(mem.MaxGiB, m, 1)
+		p.MemoryMax = positive(loosenPtr(mem.MaxGiB, m, 1))
 		if mem.PerVCPU != nil {
 			p.MemoryPerVCPUMin = loosenPtr(mem.PerVCPU.MinGiB, m, -1)
-			p.MemoryPerVCPUMax = loosenPtr(mem.PerVCPU.MaxGiB, m, 1)
+			p.MemoryPerVCPUMax = positive(loosenPtr(mem.PerVCPU.MaxGiB, m, 1))
 		}
 	}
 	if cpu := s.CPU; cpu != nil {
@@ -158,7 +168,7 @@ func (cs *compiled) pushDown(m float64) keeper.PushDown {
 	}
 	// Keeper's price excludes the managed fee, so this is looser than the
 	// client-side check whenever the fee is included.
-	p.PriceMax = loosenPtr(cs.maxHourly, m, 1)
+	p.PriceMax = positive(loosenPtr(cs.maxHourly, m, 1))
 	return p
 }
 

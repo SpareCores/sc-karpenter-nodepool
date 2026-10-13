@@ -120,6 +120,10 @@ test-l4: ## L4: the real AWS and Azure provider code (pkg/test environments, in-
 	cd test/l4 && go vet ./... && golangci-lint run ./...
 	cd test/l4 && go test -count=1 -timeout 20m -v ./... 2>&1 | tee .out/l4.log
 
+.PHONY: test-live-keeper
+test-live-keeper: ## Every selector against the live Keeper API, all snapshot vendors: accepted queries, push-down without effect on the selection.
+	go test -count=1 -tags livekeeper -run TestLiveKeeper -timeout 50m ./internal/selection/
+
 .PHONY: test-chart
 test-chart: ## Helm chart: lint, golden `helm template` output, CRD and RBAC in sync (UPDATE=1 rewrites the golden files).
 	@test -n "$$SCKN_DEV_CONTAINER" || { echo "run via hack/dev.sh" >&2; exit 1; }
