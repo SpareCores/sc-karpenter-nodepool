@@ -62,8 +62,13 @@ order:
 2. **Fetch.** For each benchmark used by `spec.selector.benchmarks`,
    `spec.selector.workloadProfiles` or `spec.ranking`, one Keeper query:
    `GET /servers?vendor=<v>&vendor_regions=<v>~<r>&benchmark_id=<id>&benchmark_config=<canonical>&best_price_allocation=<basis>&limit=-1`
-   (regions in chunks of three). Without benchmarks, a single query without the
-   benchmark parameters. Rows are joined on `api_reference`.
+   (regions in chunks of three), plus a base query without benchmark and
+   without filters that lists every offered type. Without benchmarks, the base
+   query alone; with exactly one benchmark, one query: the benchmark query
+   without filters, which lists every offered type too. Rows are joined on
+   `api_reference`. Every request of a refresh carries Keeper's database hash
+   (`data_version`, from `/healthcheck`), so the CDN in front of Keeper serves
+   all of them from one data version.
    Keeper's default status filter applies: `ACTIVE` or
    `PLANNED_FOR_RETIREMENT`.
 3. **Provider eligibility.** The adapter removes types the provider cannot

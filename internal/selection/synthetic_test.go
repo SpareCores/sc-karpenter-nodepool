@@ -9,6 +9,7 @@ package selection
 import (
 	"errors"
 	"math"
+	"reflect"
 	"slices"
 	"testing"
 
@@ -530,5 +531,28 @@ func TestPlanQueriesZeroUpperBounds(t *testing.T) {
 		if p.GPUMax == nil || *p.GPUMax != 0 {
 			t.Errorf("%s: gpu_max 0 (no accelerators) must still be sent, got %v", q.Benchmark.ID, p.GPUMax)
 		}
+	}
+}
+
+// One benchmark: the base and the benchmark query are one query, the
+// benchmark query without push-down (it lists every offered type).
+func TestPlanQueriesSingleBenchmark(t *testing.T) {
+	spec := &v1alpha1.SCNodePoolSpec{
+		Selector: &v1alpha1.Selector{VCPUs: &v1alpha1.IntRange{Min: new(int32(2)), Max: new(int32(4))}},
+		Ranking: &v1alpha1.Ranking{
+			Score:     v1alpha1.RankingScore{Benchmark: geekbenchSingle()},
+			Objective: v1alpha1.ObjectiveScore,
+			Families:  &v1alpha1.RankingFamilies{Max: new(int32(3))},
+		},
+	}
+	qs, err := PlanQueries(spec, "aws", []string{"us-east-1"}, Options{Catalog: catalog})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(qs) != 1 || qs[0].Benchmark == nil || *qs[0].Benchmark != testKey {
+		t.Fatalf("want one query on %v, got %+v", testKey, qs)
+	}
+	if !reflect.DeepEqual(qs[0].PushDown, keeper.PushDown{}) {
+		t.Errorf("the single query must not push down filters: %+v", qs[0].PushDown)
 	}
 }

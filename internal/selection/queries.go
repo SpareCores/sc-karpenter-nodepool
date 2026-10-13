@@ -27,6 +27,11 @@ const keeperVCPUsLimit = 256
 // so every type that might be kept by the margin still gets its scores.
 // Benchmark thresholds are pushed down only with unbenchmarked: Exclude
 // (Keeper drops rows without a score when one is set).
+//
+// With exactly one benchmark, the base query and the benchmark query are one
+// query: the benchmark query without push-down, which lists every offered
+// type as the base query does (Keeper outer-joins the scores) and carries
+// the score. One request instead of two, and no mix of data versions.
 func PlanQueries(spec *v1alpha1.SCNodePoolSpec, vendor string, regions []string, opts Options) ([]keeper.Query, error) {
 	cs, err := compile(spec, opts)
 	if err != nil {
@@ -59,6 +64,11 @@ func PlanQueries(spec *v1alpha1.SCNodePoolSpec, vendor string, regions []string,
 	}
 	if cs.ranking != nil {
 		need(cs.ranking.key)
+	}
+	if len(keys) == 1 {
+		key := keys[0]
+		base.Benchmark = &key
+		return []keeper.Query{base}, nil
 	}
 	for _, k := range keys {
 		out = append(out, *byKey[k])

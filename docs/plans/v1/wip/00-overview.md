@@ -940,8 +940,8 @@ in the NodeClass status when readable.
   | `vcpus.min` / `.max` | `vcpus_min` / `vcpus_max` | only values ≤ 256 (Keeper's limit) |
   | `architectures` | `architecture` | `amd64` → `x86_64`, `arm64` → `arm64` |
   | `memory.minGiB` / `.maxGiB` | `memory_min` / `memory_max` | Keeper's "GB" is GiB (× 1024 MiB) |
-  | `cpu.caches.l1dPerCoreMinKiB`, `l1iPerCoreMinKiB`, `l2PerCoreMinKiB` | `cpu_l1d_cache_min`, `cpu_l1i_cache_min`, `cpu_l2_cache_min` | KiB per core |
-  | `cpu.caches.l3MinMiB`, `l3TotalMinMiB` | `cpu_l3_cache_min`, `cpu_l3_cache_total_min` | MiB |
+  | `cpu.caches.l1dPerCoreMinKiB`, `l1iPerCoreMinKiB`, `l2PerCoreMinKiB` | `cpu_l1d_cache_min`, `cpu_l1i_cache_min`, `cpu_l2_cache_min` | KiB per core; integers in Keeper, so the loosened bound is rounded down |
+  | `cpu.caches.l3MinMiB`, `l3TotalMinMiB` | `cpu_l3_cache_min`, `cpu_l3_cache_total_min` | MiB (Keeper multiplies by 1024); integers, rounded down |
   | `cpu.clockSpeedMinGHz` | `cpu_speed_min` | |
   | `cpu.hyperthreading` | `cpu_hyperthreading` | |
   | `network.baselineMinGbps`, `.peakMinGbps` | `network_speed_baseline_min`, `network_speed_max_min` | |
@@ -955,10 +955,21 @@ in the NodeClass status when readable.
   | benchmark `min` (`normalize: PerVcpu`) | `benchmark_score_per_vcpu_min` | |
   | benchmark `min` (`normalize: PerPrice`) | `benchmark_score_per_price_min` | looser than client-side when the fee is included |
 
+  Upper bounds of zero or less (`vcpus.max`, `memory.maxGiB`,
+  `memory.perVcpu.maxGiB`, `price.maxHourly`) are not pushed down: Keeper
+  rejects them (`ge=1` / `gt=0`), and they admit nothing, which the client
+  applies anyway.
+
   The controller also always runs one base query per vendor and regions
   without push-down filters (push-downs ride only on the benchmark queries,
   loosened by the churn margin). Otherwise a type dropped by a pushed-down
-  filter would look "no longer offered" and escape churn control.
+  filter would look "no longer offered" and escape churn control. With
+  exactly one benchmark, the base and the benchmark query are one query (the
+  benchmark query without push-down: Keeper outer-joins the scores, so it
+  lists every offered type).
+
+  `make test-live-keeper` checks this contract against the live API: every
+  planned query is accepted, and the push-down never changes the selection.
 
   Not pushed down: enum-valued selectors (`cpu.manufacturers`, `cpu.flags`,
   `accelerator.types`, `accelerator.manufacturers`, `accelerator.models`,
@@ -973,6 +984,13 @@ in the NodeClass status when readable.
   responses are cacheable for an hour. Requests are shared across `SCNodePool`s
   with identical parameters within a refresh cycle. An optional API key lifts
   the region limit.
+- Keeper sits behind a CDN that caches every URL on its own (an hour plus 15
+  minutes stale-while-revalidate), and the database changes several times an
+  hour, so the queries of one evaluation could see different data versions.
+  Each refresh cycle reads `GET /healthcheck` (never cached) once and sends
+  its `database_hash` as `data_version` on every cacheable request: one cache
+  generation per data version, shared by all controllers on that version.
+  Keeper ignores the parameter.
 - On errors: retry with backoff (on HTTP 429 wait for the `Retry-After`
   header Keeper sends since October 2026), then keep the last NodePool and set
   `DataAvailable=False`.

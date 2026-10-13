@@ -353,8 +353,80 @@ func TestFetcherMemoises(t *testing.T) {
 	if _, err := fb.ServersAll(ctx, []keeper.Query{bad}); err == nil {
 		t.Fatal("want an error")
 	}
-	if got := len(srv.Requests()); got != 6 {
-		t.Errorf("failed query requested %d times, want once", got-5)
+	failed := 0
+	for _, u := range srv.Requests()[5:] {
+		if u.Path == "/servers" {
+			failed++
+		}
+	}
+	if failed != 1 {
+		t.Errorf("failed query requested %d times, want once", failed)
+	}
+}
+
+// Every cacheable request of a cycle carries the database hash, so that the
+// CDN serves the whole cycle from one data version; /healthcheck does not.
+func TestFetcherDataVersion(t *testing.T) {
+	srv := keepertest.New(t)
+	f := keeper.NewFetcher(keeper.New(srv.URL))
+	ctx := context.Background()
+	if _, err := f.Servers(ctx, awsQuery()); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := f.BenchmarkCatalog(ctx); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := f.Regions(ctx); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := f.Zones(ctx); err != nil {
+		t.Fatal(err)
+	}
+	want := srv.Manifest().Keeper.DatabaseHash
+	if want == "" {
+		t.Fatal("the snapshot has no database hash")
+	}
+	paths := map[string]bool{}
+	for _, u := range srv.Requests() {
+		paths[u.Path] = true
+		got := u.Query().Get(keeper.DataVersionParam)
+		if u.Path == "/healthcheck" {
+			if got != "" {
+				t.Errorf("/healthcheck carries %s=%q", keeper.DataVersionParam, got)
+			}
+			continue
+		}
+		if got != want {
+			t.Errorf("%s: %s=%q, want %q", u.Path, keeper.DataVersionParam, got, want)
+		}
+	}
+	for _, p := range []string{"/healthcheck", "/servers", "/benchmark_configs", "/table/region", "/table/zone"} {
+		if !paths[p] {
+			t.Errorf("no request to %s", p)
+		}
+	}
+}
+
+// Without a hash (healthcheck failing) the requests go out unversioned.
+func TestFetcherWithoutDataVersion(t *testing.T) {
+	h, err := keepertest.NewHandler(keepertest.SnapshotDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path == "/healthcheck" {
+			http.Error(w, "down", http.StatusNotFound)
+			return
+		}
+		if r.URL.Query().Has(keeper.DataVersionParam) {
+			t.Errorf("%s carries %s without a healthcheck", r.URL.Path, keeper.DataVersionParam)
+		}
+		h.ServeHTTP(w, r)
+	}))
+	defer srv.Close()
+	f := keeper.NewFetcher(keeper.New(srv.URL, keeper.WithRetries(0, 0, 0)))
+	if _, err := f.Servers(context.Background(), awsQuery()); err != nil {
+		t.Fatal(err)
 	}
 }
 
@@ -383,6 +455,10 @@ func TestFetcherCancelledCallerDoesNotPoison(t *testing.T) {
 	release := make(chan struct{})
 	var calls atomic.Int32
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path == "/healthcheck" {
+			_, _ = fmt.Fprint(w, `{"database_hash": "h", "database_last_updated": 0}`)
+			return
+		}
 		if calls.Add(1) == 1 {
 			select {
 			case <-release:

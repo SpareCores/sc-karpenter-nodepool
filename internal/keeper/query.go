@@ -30,7 +30,16 @@ type Query struct {
 	// must be equal to or looser than the client-side checks, which are always
 	// re-applied.
 	PushDown PushDown
+	// DataVersion, when set, is sent as data_version (see DataVersionParam).
+	DataVersion string
 }
+
+// DataVersionParam carries Keeper's database hash on cacheable requests.
+// Keeper ignores it, but the CDN in front of Keeper caches every URL on its
+// own for up to an hour: with the hash in the URL, all requests of a refresh
+// share one cache generation and see the same data version, and a new
+// database version is a new set of URLs.
+const DataVersionParam = "data_version"
 
 // BenchmarkKey identifies one benchmark score: a benchmark_id and the
 // canonical config string from /benchmark_configs.
@@ -110,6 +119,9 @@ func (q Query) values(regions []string) url.Values {
 		v.Set("benchmark_config", q.Benchmark.Config)
 	}
 	q.PushDown.encode(v)
+	if q.DataVersion != "" {
+		v.Set(DataVersionParam, q.DataVersion)
+	}
 	return v
 }
 

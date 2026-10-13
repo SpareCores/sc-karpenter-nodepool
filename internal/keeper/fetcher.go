@@ -16,6 +16,11 @@ import (
 // Errors are memoised too, so one failing query fails consistently within the
 // cycle. Create a new Fetcher per refresh cycle; it is safe for concurrent
 // use, and concurrent identical calls share one request.
+//
+// The cacheable requests of a cycle (/servers, /benchmark_configs and the
+// region and zone tables) carry the database hash of /healthcheck, read
+// once per cycle, as data_version (see DataVersionParam). Without a hash
+// (healthcheck failed) they are sent without it.
 type Fetcher struct {
 	client *Client
 
@@ -69,6 +74,7 @@ type QueryResult struct {
 // Servers runs (or reuses) a /servers query. The returned slice is shared and
 // must not be modified.
 func (f *Fetcher) Servers(ctx context.Context, q Query) ([]Server, error) {
+	q.DataVersion = f.dataVersion(ctx)
 	v, err := f.memo(ctx, q.cacheKey(), func(ctx context.Context) (any, error) {
 		return f.client.Servers(ctx, q)
 	})
@@ -94,7 +100,7 @@ func (f *Fetcher) ServersAll(ctx context.Context, qs []Query) ([]QueryResult, er
 // BenchmarkConfigs returns (or reuses) /benchmark_configs.
 func (f *Fetcher) BenchmarkConfigs(ctx context.Context) ([]BenchmarkConfig, error) {
 	v, err := f.memo(ctx, "/benchmark_configs", func(ctx context.Context) (any, error) {
-		return f.client.BenchmarkConfigs(ctx)
+		return f.client.benchmarkConfigsAt(ctx, f.dataVersion(ctx))
 	})
 	if err != nil {
 		return nil, err
@@ -120,7 +126,7 @@ func (f *Fetcher) BenchmarkCatalog(ctx context.Context) (*BenchmarkCatalog, erro
 // Regions returns (or reuses) /table/region.
 func (f *Fetcher) Regions(ctx context.Context) ([]Region, error) {
 	v, err := f.memo(ctx, "/table/region", func(ctx context.Context) (any, error) {
-		return f.client.Regions(ctx)
+		return f.client.regionsAt(ctx, f.dataVersion(ctx))
 	})
 	if err != nil {
 		return nil, err
@@ -131,7 +137,7 @@ func (f *Fetcher) Regions(ctx context.Context) ([]Region, error) {
 // Zones returns (or reuses) /table/zone.
 func (f *Fetcher) Zones(ctx context.Context) ([]Zone, error) {
 	v, err := f.memo(ctx, "/table/zone", func(ctx context.Context) (any, error) {
-		return f.client.Zones(ctx)
+		return f.client.zonesAt(ctx, f.dataVersion(ctx))
 	})
 	if err != nil {
 		return nil, err
@@ -148,4 +154,14 @@ func (f *Fetcher) Health(ctx context.Context) (Health, error) {
 		return Health{}, err
 	}
 	return v.(Health), nil
+}
+
+// dataVersion is the database hash of the cycle, or "" if /healthcheck
+// failed (its error is memoised, so it is asked once per cycle).
+func (f *Fetcher) dataVersion(ctx context.Context) string {
+	h, err := f.Health(ctx)
+	if err != nil {
+		return ""
+	}
+	return h.DatabaseHash
 }

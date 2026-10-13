@@ -146,22 +146,34 @@ func cheaper(a, b *float64) bool {
 
 // BenchmarkConfigs returns every (benchmark_id, config) pair Keeper knows.
 func (c *Client) BenchmarkConfigs(ctx context.Context) ([]BenchmarkConfig, error) {
+	return c.benchmarkConfigsAt(ctx, "")
+}
+
+func (c *Client) benchmarkConfigsAt(ctx context.Context, version string) ([]BenchmarkConfig, error) {
 	var out []BenchmarkConfig
-	err := c.get(ctx, "/benchmark_configs", nil, &out)
+	err := c.get(ctx, "/benchmark_configs", versionParams(version), &out)
 	return out, err
 }
 
 // Regions returns the region table of every vendor.
 func (c *Client) Regions(ctx context.Context) ([]Region, error) {
+	return c.regionsAt(ctx, "")
+}
+
+func (c *Client) regionsAt(ctx context.Context, version string) ([]Region, error) {
 	var out []Region
-	err := c.get(ctx, "/table/region", nil, &out)
+	err := c.get(ctx, "/table/region", versionParams(version), &out)
 	return out, err
 }
 
 // Zones returns the zone table of every vendor.
 func (c *Client) Zones(ctx context.Context) ([]Zone, error) {
+	return c.zonesAt(ctx, "")
+}
+
+func (c *Client) zonesAt(ctx context.Context, version string) ([]Zone, error) {
 	var out []Zone
-	err := c.get(ctx, "/table/zone", nil, &out)
+	err := c.get(ctx, "/table/zone", versionParams(version), &out)
 	return out, err
 }
 
@@ -179,6 +191,15 @@ func (c *Client) Health(ctx context.Context) (Health, error) {
 		DatabaseHash:        raw.DatabaseHash,
 		DatabaseLastUpdated: time.Unix(int64(sec), int64(frac*1e9)).UTC(),
 	}, nil
+}
+
+// versionParams is the data_version parameter of a cacheable table request
+// (nil without a version).
+func versionParams(version string) url.Values {
+	if version == "" {
+		return nil
+	}
+	return url.Values{DataVersionParam: {version}}
 }
 
 // get performs a GET with retries and decodes the JSON body into out.
