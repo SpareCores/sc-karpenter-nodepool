@@ -254,9 +254,19 @@ Read them with care:
   thread hit", not a dedicated amount, and a larger instance of the same
   family does not get more `l3MinMiB`.
 - For workloads where cache behaviour really matters, prefer the measured
-  effect: `membench:latency` and `membench:bandwidth_read` per working-set size
-  (`{"size_kb": N}`, 16 KiB to 2 GiB) show where the latency cliff of each
-  type is (coverage is lower: 213 AWS types).
+  effect, and mind how many threads a benchmark uses:
+  - `passmark:memory_read_cached` is one thread reading data that fits in the
+    caches (MB/s): the same on every size of a family (`m8azn` about 37,800,
+    `c8a` about 33,900), with PassMark's coverage. `passmark:memory_latency` ↓
+    is one thread chasing pointers through 512 MB, i.e. RAM latency.
+  - `bw_mem` (lmbench) reads a working set of `size` MB
+    (`{"operation": "rd", "size": 1.0}`; 0.016384 = 16 KiB up to 512 MB) with
+    one copy per vCPU, so its raw score grows with the instance size: use
+    `normalize: PerVcpu` for a per-core value (with SMT, two vCPUs share a
+    core and its caches).
+  - `membench:*` measures all threads together (OpenMP), so it describes the
+    whole machine, not one core, and covers few types (213 on AWS, none of
+    `m8azn`, `m8a` or `m8i`).
 
 ### Memory
 
@@ -367,7 +377,8 @@ Picking the right metric matters more than the threshold:
 |---|---|
 | How fast is one thread (latency, serial steps, CI)? | `geekbench:score {"cores": "single"}`, `passmark:cpu_single_threaded_test`, `stress_ng:best1` |
 | How much throughput per vCPU or per dollar? | `stress_ng:bestn` or `passmark:cpu_mark` with `PerVcpu` or `PerPrice` |
-| Memory-bound analytics? | `membench:bandwidth_read {"scope": "RAM"}`, `passmark:memory_mark`, `workload_profile:data_analysis` |
+| How fast does one thread read from cache or RAM? | `passmark:memory_read_cached`, `passmark:memory_latency` ↓, `bw_mem {"operation": "rd", "size": …}` with `PerVcpu` |
+| Memory-bound analytics, all cores? | `membench:bandwidth_read {"scope": "RAM"}` (all threads), `passmark:memory_mark`, `workload_profile:data_analysis` |
 | A specific application? | `redis:*`, `static_web:*`, `openssl`, `compression_text:*`, `pgbench:*`, `llm_speed:*` |
 | GPU data movement? | `nvbandwidth:*` |
 
@@ -500,8 +511,8 @@ dimensions are listed as `key ∈ values`; the exact accepted configs are what
 | stress-ng (raw) | `stress_ng:div16`, `stress_ng:cpu_all` | ops/s | `cores` (not listed by `/benchmark_configs`; avoid) |
 | Geekbench 6 | `geekbench:score` and subscores `asset_compression`, `background_blur`, `clang`, `file_compression`, `hdr`, `horizon_detection`, `html5_browser`, `navigation`, `object_detection`, `object_remover`, `pdf_renderer`, `photo_filter`, `photo_library`, `ray_tracer`, `structure_from_motion`, `text_processing` | score (2500 = baseline) | `cores ∈ {single, multi}` |
 | PassMark | `passmark:cpu_mark`, `memory_mark`, `cpu_single_threaded_test`, `cpu_integer_maths_test`, `cpu_floating_point_maths_test`, `cpu_extended_instructions_test`, `cpu_encryption_test`, `cpu_compression_test`, `cpu_physics_test`, `cpu_prime_numbers_test`, `cpu_string_sorting_test`, `database_operations`, `memory_read_cached`, `memory_read_uncached`, `memory_write`; `passmark:memory_latency` ↓ | various (MB/s, Mops/s, ns) | none |
-| membench | `membench:bandwidth_read`, `bandwidth_write`, `bandwidth_copy` (MB/s); `membench:latency` ↓ (ns) | | `{"scope": "RAM"}` or `size_kb ∈ 16 … 2097152` |
-| lmbench | `bw_mem` | MB/s | `operation ∈ {rd, wr, rdwr}` × `size` (MB) |
+| membench | `membench:bandwidth_read`, `bandwidth_write`, `bandwidth_copy` (MB/s); `membench:latency` ↓ (ns); all threads together | | `{"scope": "RAM"}` or `size_kb ∈ 16 … 2097152` |
+| lmbench | `bw_mem`; one copy per vCPU, so `PerVcpu` gives a per-core value | MB/s | `operation ∈ {rd, wr, rdwr}` × `size` (MB) |
 | Redis | `redis:rps`, `redis:rps-extrapolated`; `redis:latency` ↓ | ops/s, ms | `operation: SET` × `pipeline ∈ {1, 4, 16, 64, 256, 512}` |
 | Static web (nginx) | `static_web:rps`, `rps-extrapolated`, `throughput`, `throughput-extrapolated`; `static_web:latency` ↓ | rps, B/s, s | `connections_per_vcpus ∈ {0.5 … 32}` × `size ∈ {1k, 16k, 64k, 256k, 512k}` |
 | OpenSSL | `openssl` | B/s | `algo` (sha256, sha512, sha3-*, shake*, blake2b512, AES-256-CBC, ARIA-256-CBC, CAMELLIA-256-CBC, SM4-CBC) × `block_size ∈ {16 … 16384}` |
