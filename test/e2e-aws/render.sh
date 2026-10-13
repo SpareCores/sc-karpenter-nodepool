@@ -7,7 +7,7 @@
 #   scnodepool.yaml       the SCNodePool under test
 #   pause.yaml            the workload
 #
-# Needs E2E_TARGET and the repository variables (see lib.sh). Used by the
+# Needs E2E_TARGET and the repository secrets (see lib.sh). Used by the
 # workflow and, with placeholder values, by validate.sh.
 set -euo pipefail
 

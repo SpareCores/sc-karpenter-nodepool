@@ -12,8 +12,9 @@ name: E2E AWS
 #
 # The environment only admits deployments from main, and the OIDC role of
 # AWS_ROLE_ARN only trusts jobs of that environment. The identifiers of the
-# account are repository variables (vars.*), masked in the log; the
-# diagnostics artifact is redacted.
+# account are repository secrets (secrets.*), so GitHub masks them everywhere
+# in the log, the environment dump of every step included; the diagnostics
+# artifact is redacted.
 on:
   workflow_dispatch:
     inputs:
@@ -124,26 +125,25 @@ jobs:
       E2E_OUT: ${{ github.workspace }}/e2e-out
       KUBECONFIG: ${{ github.workspace }}/e2e-out/kubeconfig
       AWS_REGION: ${{ vars.AWS_REGION }}
-      AWS_ACCOUNT_ID: ${{ vars.AWS_ACCOUNT_ID }}
-      SCKN_VPC_ID: ${{ vars.SCKN_VPC_ID }}
-      SCKN_SUBNET_IDS: ${{ vars.SCKN_SUBNET_IDS }}
-      SCKN_CLUSTER_ROLE_ARN: ${{ vars.SCKN_CLUSTER_ROLE_ARN }}
-      SCKN_AUTO_NODE_ROLE_NAME: ${{ vars.SCKN_AUTO_NODE_ROLE_NAME }}
-      SCKN_KARPENTER_NODE_ROLE_NAME: ${{ vars.SCKN_KARPENTER_NODE_ROLE_NAME }}
-      SCKN_KARPENTER_NODE_ROLE_ARN: ${{ vars.SCKN_KARPENTER_NODE_ROLE_ARN }}
-      SCKN_KARPENTER_CONTROLLER_ROLE_ARN: ${{ vars.SCKN_KARPENTER_CONTROLLER_ROLE_ARN }}
+      AWS_ACCOUNT_ID: ${{ secrets.AWS_ACCOUNT_ID }}
+      SCKN_VPC_ID: ${{ secrets.SCKN_VPC_ID }}
+      SCKN_SUBNET_IDS: ${{ secrets.SCKN_SUBNET_IDS }}
+      SCKN_CLUSTER_ROLE_ARN: ${{ secrets.SCKN_CLUSTER_ROLE_ARN }}
+      SCKN_AUTO_NODE_ROLE_NAME: ${{ secrets.SCKN_AUTO_NODE_ROLE_NAME }}
+      SCKN_KARPENTER_NODE_ROLE_NAME: ${{ secrets.SCKN_KARPENTER_NODE_ROLE_NAME }}
+      SCKN_KARPENTER_NODE_ROLE_ARN: ${{ secrets.SCKN_KARPENTER_NODE_ROLE_ARN }}
+      SCKN_KARPENTER_CONTROLLER_ROLE_ARN: ${{ secrets.SCKN_KARPENTER_CONTROLLER_ROLE_ARN }}
     steps:
-      # Variables are not secrets, but the repository is public and the
-      # account is not: keep the identifiers out of the log.
-      - name: Mask the account's identifiers
+      # The secrets are masked as a whole; the subnets also show up one by one
+      # (eksctl lists them), so each is masked on its own.
+      - name: Mask the subnets
         run: |
-          for v in AWS_ACCOUNT_ID SCKN_VPC_ID SCKN_CLUSTER_ROLE_ARN SCKN_KARPENTER_NODE_ROLE_ARN \
+          for v in AWS_ACCOUNT_ID SCKN_VPC_ID SCKN_SUBNET_IDS SCKN_CLUSTER_ROLE_ARN SCKN_KARPENTER_NODE_ROLE_ARN \
             SCKN_KARPENTER_CONTROLLER_ROLE_ARN SCKN_AUTO_NODE_ROLE_NAME SCKN_KARPENTER_NODE_ROLE_NAME; do
             if [[ -z "${!v}" ]]; then
-              echo "::error::repository variable ${v} is not set"
+              echo "::error::repository secret ${v} is not set"
               exit 1
             fi
-            echo "::add-mask::${!v}"
           done
           tr -d '[]"' <<<"${SCKN_SUBNET_IDS}" | tr -s ',[:space:]' '\n' | grep -v '^$' |
             while read -r id; do echo "::add-mask::${id}"; done
@@ -161,7 +161,7 @@ jobs:
       - name: AWS credentials
         uses: aws-actions/configure-aws-credentials@e1253824e5c10ff9df46874f81ed3ec929e19cfd # v6.3.0
         with:
-          role-to-assume: ${{ vars.AWS_ROLE_ARN }}
+          role-to-assume: ${{ secrets.AWS_ROLE_ARN }}
           aws-region: ${{ vars.AWS_REGION }}
 
       - name: Render the configuration
@@ -182,7 +182,7 @@ jobs:
       - name: AWS credentials (renewed)
         uses: aws-actions/configure-aws-credentials@e1253824e5c10ff9df46874f81ed3ec929e19cfd # v6.3.0
         with:
-          role-to-assume: ${{ vars.AWS_ROLE_ARN }}
+          role-to-assume: ${{ secrets.AWS_ROLE_ARN }}
           aws-region: ${{ vars.AWS_REGION }}
 
       - name: Set up Auto Mode (NodeClass, infrastructure NodePool)
@@ -225,7 +225,7 @@ jobs:
         if: always()
         uses: aws-actions/configure-aws-credentials@e1253824e5c10ff9df46874f81ed3ec929e19cfd # v6.3.0
         with:
-          role-to-assume: ${{ vars.AWS_ROLE_ARN }}
+          role-to-assume: ${{ secrets.AWS_ROLE_ARN }}
           aws-region: ${{ vars.AWS_REGION }}
 
       - name: Teardown

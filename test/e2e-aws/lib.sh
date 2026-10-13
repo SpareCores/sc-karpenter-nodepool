@@ -7,8 +7,8 @@
 # GitHub workflows .github/workflows/e2e-aws.yml and e2e-aws-sweeper.yml,
 # never on a developer machine.
 #
-# The identifiers of the account come from repository variables, exported to
-# the job environment by the workflow: AWS_REGION, AWS_ACCOUNT_ID,
+# The identifiers of the account come from repository secrets (AWS_REGION is a
+# variable), exported to the job environment by the workflow: AWS_ACCOUNT_ID,
 # SCKN_VPC_ID, SCKN_SUBNET_IDS (comma or space separated),
 # SCKN_CLUSTER_ROLE_ARN, SCKN_AUTO_NODE_ROLE_NAME,
 # SCKN_KARPENTER_NODE_ROLE_NAME, SCKN_KARPENTER_NODE_ROLE_ARN and
@@ -114,7 +114,7 @@ subnet_ids() {
 }
 
 # template_init: the values the templates need on top of the variables of the
-# job. Needs the repository variables, so it is separate from target_init.
+# job. Needs the repository secrets, so it is separate from target_init.
 template_init() {
   require_env AWS_REGION AWS_ACCOUNT_ID SCKN_VPC_ID SCKN_SUBNET_IDS SCKN_CLUSTER_ROLE_ARN \
     SCKN_AUTO_NODE_ROLE_NAME SCKN_KARPENTER_NODE_ROLE_NAME SCKN_KARPENTER_NODE_ROLE_ARN \
@@ -167,6 +167,9 @@ redact() {
   fi
   # Whatever else looks like an account id inside an ARN.
   args+=(-E -e 's/(arn:aws[a-z-]*:[a-z0-9-]*:[a-z0-9-]*:)[0-9]{12}:/\1<account>:/g')
+  # Security groups (the cluster's own and the node group's) are not
+  # variables, but name resources of the account all the same.
+  args+=(-e 's/\bsg-[0-9a-f]{8,17}\b/<security-group>/g')
   sed "${args[@]}"
 }
 

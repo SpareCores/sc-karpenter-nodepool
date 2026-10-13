@@ -121,7 +121,7 @@ non-local HTTP request to a local proxy that refuses it and fails the run.
 ### L5 in detail
 
 L5 runs only in GitHub Actions, in the `aws-e2e` environment (deployments from
-`main`; its repository variables name the account's VPC, subnets and the
+`main`; its repository secrets name the account's VPC, subnets and the
 pre-created IAM roles), and costs money. Nothing in this repository, and no
 command of this guide, calls AWS from your machine. The workflow
 `.github/workflows/e2e-aws.yml` (manual trigger; inputs `targets`:

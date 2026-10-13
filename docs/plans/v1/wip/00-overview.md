@@ -1113,9 +1113,9 @@ Static resources, managed in Spare Cores' private infrastructure repository
   instance type other than small `t3/t3a/t4g` and `c*/m*/r*` up to `xlarge`.
 - EKS service-linked roles, a $10/month EKS budget with e-mail alerts (budgets
   without actions are free).
-- Repository variables: `AWS_ROLE_ARN`, `AWS_REGION`, `AWS_ACCOUNT_ID`,
-  `SCKN_VPC_ID`, `SCKN_SUBNET_IDS`, `SCKN_CLUSTER_ROLE_ARN`,
-  `SCKN_AUTO_NODE_ROLE_NAME`, `SCKN_KARPENTER_NODE_ROLE_NAME`,
+- Repository variable `AWS_REGION`; repository secrets (masked in the log,
+  the repository is public) `AWS_ROLE_ARN`, `AWS_ACCOUNT_ID`, `SCKN_VPC_ID`,
+  `SCKN_SUBNET_IDS`, `SCKN_CLUSTER_ROLE_ARN`, `SCKN_AUTO_NODE_ROLE_NAME`, `SCKN_KARPENTER_NODE_ROLE_NAME`,
   `SCKN_KARPENTER_NODE_ROLE_ARN`, `SCKN_KARPENTER_CONTROLLER_ROLE_ARN`.
 
 Run outline (both clusters in parallel matrix jobs, `fail-fast: false`,
