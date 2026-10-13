@@ -92,6 +92,15 @@ cleanup() {
 trap cleanup EXIT
 
 gobuild() { # gobuild <dir> <output> <package>
+  # The module proxy occasionally drops a download (HTTP/2 stream errors in
+  # CI); fetch modules with retries before building.
+  local attempt
+  for attempt in 1 2 3; do
+    (cd "$1" && go mod download) && break
+    [[ "${attempt}" -lt 3 ]] || return 1
+    echo "go mod download failed (attempt ${attempt}), retrying" >&2
+    sleep $((attempt * 10))
+  done
   (cd "$1" && CGO_ENABLED=0 go build -trimpath -ldflags="-s -w" -o "$2" "$3")
 }
 

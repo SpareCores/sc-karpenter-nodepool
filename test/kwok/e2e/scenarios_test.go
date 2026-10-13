@@ -49,8 +49,12 @@ func (v vendorRun) subsetAndNarrowing(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if got := len(live(claims)); got != loadReplicas {
+	// Pods repel each other, so at least one claim per pod; Karpenter may
+	// legitimately launch a spare one (never consolidated here), so only log it.
+	if got := len(live(claims)); got < loadReplicas {
 		t.Errorf("%d NodeClaims for %d pods that repel each other: %v", got, loadReplicas, claims)
+	} else if got > loadReplicas {
+		t.Logf("%d NodeClaims for %d pods (spare capacity): %v", got, loadReplicas, claims)
 	}
 	before := v.allowedBy(t, pool)
 	if bad := before.check(live(claims)); len(bad) > 0 {
@@ -95,7 +99,10 @@ func (v vendorRun) subsetAndNarrowing(t *testing.T) {
 		l := live(cs)
 		r, _ := readyPods(pool)
 		bad := after.check(l)
-		ok := len(l) == loadReplicas && len(bad) == 0 && len(cs) == len(l) && r == loadReplicas
+		// At least one live claim per pod (hostname anti-affinity); an extra,
+		// empty replacement within the narrowed list is legitimate Karpenter
+		// behaviour and is never consolidated here (WhenEmpty after 24h).
+		ok := len(l) >= loadReplicas && len(bad) == 0 && len(cs) == len(l) && r == loadReplicas
 		return ok, fmt.Sprintf("%d claims (%d live), %d/%d pods ready, outside: %v", len(cs), len(l), r, loadReplicas, bad)
 	})
 	if !sawDrift {
