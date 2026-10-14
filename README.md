@@ -37,13 +37,14 @@ running nodes are not replaced needlessly.
 
 ## Demo
 
-[![GILty on a hand-picked r5a.large and on the c8a.large sc-karpenter-nodepool picked, side by side](docs/demo/demo.svg)](https://sparecores.github.io/sc-karpenter-nodepool/demo/)
+[![GILty on a hand-picked r5a.large and on the r6a.large sc-karpenter-nodepool picked, side by side](docs/demo/demo.svg)](https://sparecores.github.io/sc-karpenter-nodepool/demo/)
 
 [GILty](https://github.com/SpareCores/GILty), a Python app that can use only
-one core, runs on an `r5a.large` picked by hand. An `SCNodePool` asks for the
-fastest single core with a fast cache for no more than that, and gets a
-`c8a.large`: the same program runs 5.1× faster there, on a cheaper instance.
-Recorded live on EKS Auto Mode; [watch it with pause, seek and
+one core, runs on an `r5a.large` picked by hand. An `SCNodePool` asks for at
+least the same vCPUs and memory for at most 10% more money, ranked by measured
+single-core performance, and gets an `r6a.large`: same size, same price, and
+the same program runs about 2.4× faster there. Recorded live on EKS Auto Mode;
+[watch it with pause, seek and
 notes](https://sparecores.github.io/sc-karpenter-nodepool/demo/).
 
 ## Features

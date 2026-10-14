@@ -10,6 +10,8 @@ kubectl delete scnodepool --all --ignore-not-found --wait=true --timeout=300s
 helm uninstall sc-karpenter-nodepool -n sc-karpenter-nodepool --wait --ignore-not-found
 kubectl delete namespace sc-karpenter-nodepool --ignore-not-found --wait=true --timeout=300s
 kubectl delete crd scnodepools.karpenter.sparecores.com --ignore-not-found
+kubectl delete clusterrolebinding,clusterrole gilty-node-reader --ignore-not-found
+kubectl delete serviceaccount gilty --ignore-not-found
 for _ in $(seq 90); do
   [[ "$(kubectl get nodeclaims -l 'karpenter.sh/nodepool in (gilty,batch,python-apps,general-purpose)' -o name | wc -l)" == 0 ]] && break
   sleep 10

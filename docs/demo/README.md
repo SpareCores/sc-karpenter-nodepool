@@ -1,23 +1,31 @@
-# Demo: same budget, five times the speed for GILty
+# Demo: same size, same price, 2.4× the speed for GILty
 
-[![The demo: sc-karpenter-nodepool on EKS Auto Mode](demo.svg)](https://sparecores.github.io/sc-karpenter-nodepool/demo/)
+[![The demo: sc-karpenter-nodepool on EKS Auto Mode](demo.svg)](index.html)
 
 [GILty](https://github.com/SpareCores/GILty) is a Python app that cannot use
 more than one CPU: it learns *Moby-Dick* as a Markov chain and babbles in its
 style, one dependent hash lookup after the other, so only a faster core and a
 faster cache make it faster. On a live EKS Auto Mode cluster, the demo:
 
-1. runs GILty on an instance type picked by hand, `r5a.large` (AMD EPYC 7571),
-   through a plain Karpenter NodePool, and shows its speed in its logs;
-2. installs sc-karpenter-nodepool v0.1.1 and creates an `SCNodePool` that
-   asks for what Karpenter's labels cannot express: the fastest single core
-   (Geekbench 6) with a fast cache (at least 30,000 MB/s of single-threaded
-   cached reads, PassMark), for no more than the `r5a.large` costs
-   ($0.1266/h with the Auto Mode fee). It selects `c8a.large` (AMD EPYC 9R45,
-   $0.1207/h);
+1. runs GILty on an instance type picked by hand, `r5a.large` (AMD EPYC 7571,
+   2 vCPUs, 16 GiB), through a plain Karpenter NodePool, and shows its speed
+   in its logs;
+2. installs sc-karpenter-nodepool v0.1.1 and creates an `SCNodePool` with the
+   same constraints: at least 2 vCPUs and 16 GiB, at most 10% more than the
+   `r5a.large` ($0.1392/h with the Auto Mode fee), no burstable or flex types,
+   and instance families ranked by PassMark's single-threaded score (the
+   benchmark that tracked GILty best in our measurements), keeping those
+   within 10% of the fastest. It selects `r6a.large` (AMD EPYC 7R13, the same
+   2 vCPUs and 16 GiB, $0.1270/h);
 3. runs a second, identical GILty on that pool and streams both logs side by
-   side, every five seconds: about 1.29 million words/s on the `r5a.large`,
-   6.62 million on the `c8a.large`, **5.1× faster, for less money**.
+   side, every five seconds: about 1.9–2.0 million words/s on the
+   `r5a.large`, 4.5–4.8 million on the `r6a.large`, **about 2.4× faster on an
+   instance of the same size and price**.
+
+Both pods run the same image (GILty 0.2.1, CPython from
+python-build-standalone) and name their instance type from the node's label.
+Speeds vary by about 20% between hosts of the same instance type; across our
+runs this pair measured 1.6× to 3× apart.
 
 Everything was recorded live (2026-10-14, us-east-2); only the typing is
 synthetic, and waits for nodes are time-lapsed. The two log streams play in

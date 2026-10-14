@@ -17,6 +17,9 @@ terminal:
   rows: 30
 
 steps:
+  - hidden: true
+    # a fresh cluster brings up the system pool's nodes for the add-ons
+    cmd: kubectl -n kube-system rollout status deploy/metrics-server --timeout=600s
   - chapter: Where we start
     note: >-
       An EKS Auto Mode cluster: Auto Mode runs Karpenter for us. Only its
@@ -46,6 +49,26 @@ steps:
       EOF
   - cmd: kubectl -n sc-karpenter-nodepool get pods
 
+  - hidden: true
+    # GILty reads the instance-type label of its node: a service account
+    # that may get nodes (shown in GILty's README)
+    cmd: |
+      kubectl apply -f - <<'EOF'
+      apiVersion: v1
+      kind: ServiceAccount
+      metadata: {name: gilty, namespace: default}
+      ---
+      apiVersion: rbac.authorization.k8s.io/v1
+      kind: ClusterRole
+      metadata: {name: gilty-node-reader}
+      rules: [{apiGroups: [""], resources: [nodes], verbs: [get]}]
+      ---
+      apiVersion: rbac.authorization.k8s.io/v1
+      kind: ClusterRoleBinding
+      metadata: {name: gilty-node-reader}
+      roleRef: {apiGroup: rbac.authorization.k8s.io, kind: ClusterRole, name: gilty-node-reader}
+      subjects: [{kind: ServiceAccount, name: gilty, namespace: default}]
+      EOF
   - chapter: GILty on a hand-picked instance
     note: >-
       GILty is a Python app held back by the GIL: it learns Moby-Dick as a
@@ -77,10 +100,12 @@ steps:
           metadata: {labels: {app: gilty, pool: python-apps}}
           spec:
             nodeSelector: {karpenter.sh/nodepool: python-apps}
+            serviceAccountName: gilty      # may read its node: the instance type
             containers:
               - name: gilty
-                image: ghcr.io/sparecores/gilty:0.1.0
+                image: ghcr.io/sparecores/gilty:0.2.1
                 args: [--interval, "5"]
+                env: [{name: NODE_NAME, valueFrom: {fieldRef: {fieldPath: spec.nodeName}}}]
                 resources: {requests: {cpu: "1", memory: 512Mi}}
       EOF
   - note: Auto Mode launches the r5a.large. Time-lapse.
@@ -92,8 +117,8 @@ steps:
     # a new node serves logs once its kubelet certificate is approved
     cmd: for i in $(seq 60); do kubectl logs deploy/gilty-handpicked >/dev/null 2>&1 && exit 0; sleep 3; done; exit 1
   - note: >-
-      Its speed, every five seconds, in real time: the CPU, then words per
-      second, then a sample of the babble.
+      Its speed, every five seconds, in real time: the instance type and
+      CPU, then words per second, then a sample of the babble.
     cmd: kubectl logs -f deploy/gilty-handpicked
     until: >-
       test "$(kubectl logs deploy/gilty-handpicked | grep -c 'words/s |')" -ge 4
@@ -102,10 +127,11 @@ steps:
 
   - chapter: Let Spare Cores pick
     note: >-
-      Same budget, measured data: the fastest single core (Geekbench 6) with a
-      fast cache (at least 30,000 MB/s of single-threaded cached reads,
-      PassMark), for no more than the r5a.large costs today: $0.1266/h,
-      Auto Mode fee included. No Karpenter label can say any of this.
+      Same size, same budget, measured data: at least the r5a.large's 2 vCPUs
+      and 16 GiB, for at most 10% more ($0.1392/h, Auto Mode fee included);
+      instance families ranked by PassMark's single-threaded score, the
+      benchmark that tracks GILty best, keeping those within 10% of the
+      fastest. No Karpenter label can say any of this.
     cmd: kubectl apply -f - <<'EOF'
     paste: |
       apiVersion: karpenter.sparecores.com/v1alpha1
@@ -121,16 +147,16 @@ steps:
                 requirements:
                   - {key: karpenter.sh/capacity-type, operator: In, values: [on-demand]}
         selector:
-          vcpus: {min: 2, max: 4}
-          price: {maxHourly: "0.1266"}
-          benchmarks:
-            - {id: "passmark:memory_read_cached", min: 30000}
+          vcpus: {min: 2}                        # at least what the r5a.large has:
+          memory: {minGiB: 16}                   #   2 vCPUs, 16 GiB
+          price: {maxHourly: "0.1392"}           # r5a.large + 10%, Auto Mode fee included
+          families: {exclude: ["t*", "*-flex"]}  # no burstable or flex: GILty needs a full core
         ranking:
           score:
-            benchmark: {id: "geekbench:score", config: {cores: single}}
-          objective: Score
-          band: {withinPercent: 10}
-          families: {min: 1, max: 3}
+            benchmark: {id: "passmark:cpu_single_threaded_test"}  # tracks GILty's speed best
+          objective: Score              # fastest first; the price cap keeps the budget
+          band: {withinPercent: 10}     # within 10% of the fastest counts as equal: cheapest wins
+          families: {min: 1, max: 3}    # keep 1 to 3 such families; never pad with slower ones
       EOF
   - hidden: true
     cmd: kubectl wait --for=condition=Ready scnodepool/gilty --timeout=300s
@@ -157,10 +183,12 @@ steps:
           metadata: {labels: {app: gilty, pool: gilty}}
           spec:
             nodeSelector: {karpenter.sh/nodepool: gilty}
+            serviceAccountName: gilty      # may read its node: the instance type
             containers:
               - name: gilty
-                image: ghcr.io/sparecores/gilty:0.1.0
+                image: ghcr.io/sparecores/gilty:0.2.1
                 args: [--interval, "5"]
+                env: [{name: NODE_NAME, valueFrom: {fieldRef: {fieldPath: spec.nodeName}}}]
                 resources: {requests: {cpu: "1", memory: 512Mi}}
       EOF
   - note: Time-lapse.
@@ -174,8 +202,8 @@ steps:
     cmd: for i in $(seq 60); do kubectl logs deploy/gilty-sparecores >/dev/null 2>&1 && exit 0; sleep 3; done; exit 1
   - note: >-
       Both copies, live, every five seconds: the same program on the
-      hand-picked r5a.large (EPYC 7571) and on the c8a.large (EPYC 9R45)
-      Spare Cores picked, which costs less.
+      hand-picked r5a.large and on the instance Spare Cores picked. Each
+      line starts with the instance type and the CPU.
     cmd: kubectl logs -f -l app=gilty --tail=1 --max-log-requests=2
     until: >-
       test "$(kubectl logs deploy/gilty-sparecores | grep -c 'words/s |')" -ge 7

@@ -34,7 +34,21 @@ down() {
     done
     helm uninstall sc-karpenter-nodepool -n sc-karpenter-nodepool --wait || true
   fi
-  eksctl delete cluster --name "${DEMO_CLUSTER}" --region "${AWS_REGION}" --wait --disable-nodegroup-eviction
+  # The control plane cannot be deleted while a cluster update is in progress
+  # (HTTP 409, the stack ends in DELETE_FAILED): wait for updates and retry.
+  for attempt in 1 2 3; do
+    eksctl delete cluster --name "${DEMO_CLUSTER}" --region "${AWS_REGION}" --wait --disable-nodegroup-eviction && break
+    [[ "${attempt}" == 3 ]] && exit 1
+    echo "deletion failed (attempt ${attempt}); waiting for cluster updates to finish" >&2
+    for _ in $(seq 90); do
+      busy=0
+      for id in $(aws eks list-updates --name "${DEMO_CLUSTER}" --query updateIds --output text 2>/dev/null); do
+        [[ "$(aws eks describe-update --name "${DEMO_CLUSTER}" --update-id "${id}" --query update.status --output text)" == InProgress ]] && busy=1
+      done
+      [[ "${busy}" == 0 ]] && break
+      sleep 20
+    done
+  done
   left="$(aws ec2 describe-instances --filters "Name=tag:eks:eks-cluster-name,Values=${DEMO_CLUSTER}" \
     Name=instance-state-name,Values=pending,running,stopping,stopped --query 'Reservations[].Instances[].InstanceId' --output text)"
   if [[ -n "${left}" ]]; then
