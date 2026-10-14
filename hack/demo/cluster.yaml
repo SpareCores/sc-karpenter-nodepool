@@ -1,0 +1,22 @@
+# The demo cluster: EKS Auto Mode with its built-in pools, in the account's
+# default VPC (public subnets, so no NAT gateway). eksctl creates the cluster
+# and node roles. A template, rendered by cluster.sh with envsubst.
+apiVersion: eksctl.io/v1alpha5
+kind: ClusterConfig
+
+metadata:
+  name: ${DEMO_CLUSTER}
+  region: ${AWS_REGION}
+  version: "1.35"
+
+vpc:
+  id: ${DEMO_VPC_ID}
+  subnets:
+    public: ${DEMO_SUBNETS_MAP}
+
+accessConfig:
+  authenticationMode: API
+
+autoModeConfig:
+  enabled: true
+  nodePools: [general-purpose, system]

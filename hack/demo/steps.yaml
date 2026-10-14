@@ -1,0 +1,183 @@
+# The demo, step by step. record.py runs every step for real against the demo
+# cluster and captures its output; compose.py turns the capture into
+# asciinema casts (typed commands, pasted manifests, real output).
+#
+# Step fields:
+#   chapter  starts a chapter (a marker on the timeline)
+#   note     annotation shown while the step plays (optional)
+#   cmd      the command, typed character by character
+#   paste    a manifest, pasted as a heredoc after `cmd` (kubectl apply -f - <<'EOF')
+#   until    for a watching cmd: a shell condition; once true (plus `settle`
+#            seconds) the watch is stopped with ^C.
+#   maxGap   the longest pause between two output chunks in the cast
+#            (default 1 s, 1.4 s for watches: long waits are time-lapsed)
+#   hidden   run, but not shown (waits that keep the recording deterministic)
+terminal:
+  cols: 104
+  rows: 30
+
+steps:
+  - chapter: Where we start
+    note: >-
+      An EKS Auto Mode cluster: Auto Mode runs Karpenter for us. Only its
+      built-in NodePools exist; the system pool's nodes run the cluster
+      add-ons.
+    cmd: kubectl get nodes
+  - cmd: kubectl get nodepools,nodeclasses
+  - note: >-
+      Every label Auto Mode lets a NodePool select on: family, size, vCPUs,
+      memory, generation, GPUs. The closest to speed is the vendor's clock
+      rate. Nothing on measured performance, caches, or what a unit of
+      performance costs; and Karpenter launches the cheapest allowed type.
+    cmd: kubectl get crd nodepools.karpenter.sh -o yaml | grep -o 'eks.amazonaws.com/instance-[a-z-]*' | sort -u
+
+  - chapter: Install sc-karpenter-nodepool
+    note: >-
+      The controller from the v0.1.1 release. It runs on Auto Mode's
+      general-purpose pool and reads the public Spare Cores API: specs,
+      prices and benchmark results of every instance type.
+    cmd: >-
+      helm install sc-karpenter-nodepool oci://ghcr.io/sparecores/charts/sc-karpenter-nodepool
+      --version 0.1.1 -n sc-karpenter-nodepool --create-namespace --wait -f - <<'EOF'
+    paste: |
+      # Auto Mode launches every node: run on its built-in general-purpose pool
+      nodeSelector: {karpenter.sh/nodepool: general-purpose}
+      affinity: null
+      EOF
+  - cmd: kubectl -n sc-karpenter-nodepool get pods
+
+  - chapter: GILty on a hand-picked instance
+    note: >-
+      GILty is a Python app held back by the GIL: it learns Moby-Dick as a
+      Markov chain and babbles in its style, one dependent hash lookup after
+      the other, so only a faster core and cache make it faster. The team
+      picked r5a.large for it by hand ("memory-optimized, for Python"): a
+      plain Karpenter NodePool pinned to that type.
+    cmd: kubectl apply -f - <<'EOF'
+    paste: |
+      apiVersion: karpenter.sh/v1
+      kind: NodePool
+      metadata:
+        name: python-apps
+      spec:
+        template:
+          spec:
+            nodeClassRef: {group: eks.amazonaws.com, kind: NodeClass, name: default}
+            requirements:
+              - {key: node.kubernetes.io/instance-type, operator: In, values: [r5a.large]}
+              - {key: karpenter.sh/capacity-type, operator: In, values: [on-demand]}
+      ---
+      apiVersion: apps/v1
+      kind: Deployment
+      metadata:
+        name: gilty-handpicked
+      spec:
+        selector: {matchLabels: {app: gilty, pool: python-apps}}
+        template:
+          metadata: {labels: {app: gilty, pool: python-apps}}
+          spec:
+            nodeSelector: {karpenter.sh/nodepool: python-apps}
+            containers:
+              - name: gilty
+                image: ghcr.io/sparecores/gilty:0.1.0
+                args: [--interval, "5"]
+                resources: {requests: {cpu: "1", memory: 512Mi}}
+      EOF
+  - note: Auto Mode launches the r5a.large. Time-lapse.
+    cmd: kubectl get nodeclaims -l karpenter.sh/nodepool=python-apps -w
+    until: >-
+      test "$(kubectl get pods -l pool=python-apps -o jsonpath='{.items[*].status.containerStatuses[0].ready}')" = true
+    settle: 2
+  - hidden: true
+    # a new node serves logs once its kubelet certificate is approved
+    cmd: for i in $(seq 60); do kubectl logs deploy/gilty-handpicked >/dev/null 2>&1 && exit 0; sleep 3; done; exit 1
+  - note: >-
+      Its speed, every five seconds, in real time: the CPU, then words per
+      second, then a sample of the babble.
+    cmd: kubectl logs -f deploy/gilty-handpicked
+    until: >-
+      test "$(kubectl logs deploy/gilty-handpicked | grep -c 'words/s |')" -ge 4
+    settle: 1
+    maxGap: 6
+
+  - chapter: Let Spare Cores pick
+    note: >-
+      Same budget, measured data: the fastest single core (Geekbench 6) with a
+      fast cache (at least 30,000 MB/s of single-threaded cached reads,
+      PassMark), for no more than the r5a.large costs today: $0.1266/h,
+      Auto Mode fee included. No Karpenter label can say any of this.
+    cmd: kubectl apply -f - <<'EOF'
+    paste: |
+      apiVersion: karpenter.sparecores.com/v1alpha1
+      kind: SCNodePool
+      metadata:
+        name: gilty
+      spec:
+        nodePoolTemplate:
+          spec:
+            template:
+              spec:
+                nodeClassRef: {group: eks.amazonaws.com, kind: NodeClass, name: default}
+                requirements:
+                  - {key: karpenter.sh/capacity-type, operator: In, values: [on-demand]}
+        selector:
+          vcpus: {min: 2, max: 4}
+          price: {maxHourly: "0.1266"}
+          benchmarks:
+            - {id: "passmark:memory_read_cached", min: 30000}
+        ranking:
+          score:
+            benchmark: {id: "geekbench:score", config: {cores: single}}
+          objective: Score
+          band: {withinPercent: 10}
+          families: {min: 1, max: 3}
+      EOF
+  - hidden: true
+    cmd: kubectl wait --for=condition=Ready scnodepool/gilty --timeout=300s
+  - note: >-
+      The controller generated a plain Karpenter NodePool with the instance
+      types that qualify.
+    cmd: kubectl get scnodepools,nodepools
+  - cmd: kubectl get scnodepool gilty -o yaml | yq .status.selected
+  - cmd: kubectl get nodepool gilty -o yaml | yq '.spec.template.spec.requirements'
+
+  - chapter: Side by side
+    note: >-
+      A second, identical GILty, on the pool Spare Cores picked. The first
+      one keeps running on its r5a.large.
+    cmd: kubectl apply -f - <<'EOF'
+    paste: |
+      apiVersion: apps/v1
+      kind: Deployment
+      metadata:
+        name: gilty-sparecores
+      spec:
+        selector: {matchLabels: {app: gilty, pool: gilty}}
+        template:
+          metadata: {labels: {app: gilty, pool: gilty}}
+          spec:
+            nodeSelector: {karpenter.sh/nodepool: gilty}
+            containers:
+              - name: gilty
+                image: ghcr.io/sparecores/gilty:0.1.0
+                args: [--interval, "5"]
+                resources: {requests: {cpu: "1", memory: 512Mi}}
+      EOF
+  - note: Time-lapse.
+    cmd: kubectl get nodeclaims -l karpenter.sh/nodepool=gilty -w
+    until: >-
+      test "$(kubectl get pods -l pool=gilty -o jsonpath='{.items[*].status.containerStatuses[0].ready}')" = true
+    settle: 2
+  - cmd: kubectl get nodes -L karpenter.sh/nodepool,node.kubernetes.io/instance-type
+  - hidden: true
+    # a new node serves logs once its kubelet certificate is approved
+    cmd: for i in $(seq 60); do kubectl logs deploy/gilty-sparecores >/dev/null 2>&1 && exit 0; sleep 3; done; exit 1
+  - note: >-
+      Both copies, live, every five seconds: the same program on the
+      hand-picked r5a.large (EPYC 7571) and on the c8a.large (EPYC 9R45)
+      Spare Cores picked, which costs less.
+    cmd: kubectl logs -f -l app=gilty --tail=1 --max-log-requests=2
+    until: >-
+      test "$(kubectl logs deploy/gilty-sparecores | grep -c 'words/s |')" -ge 7
+    settle: 1
+    maxGap: 6

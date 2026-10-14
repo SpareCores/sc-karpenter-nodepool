@@ -1,0 +1,93 @@
+{
+ "duration": 200.11,
+ "chapters": [
+  {
+   "start": 0.0,
+   "label": "Where we start"
+  },
+  {
+   "start": 31.769,
+   "label": "Install sc-karpenter-nodepool"
+  },
+  {
+   "start": 56.811,
+   "label": "GILty on a hand-picked instance"
+  },
+  {
+   "start": 102.509,
+   "label": "Let Spare Cores pick"
+  },
+  {
+   "start": 136.294,
+   "label": "Side by side"
+  }
+ ],
+ "notes": [
+  {
+   "start": 0.0,
+   "end": 8.778,
+   "chapter": "Where we start",
+   "text": "An EKS Auto Mode cluster: Auto Mode runs Karpenter for us. Only its built-in NodePools exist; the system pool's nodes run the cluster add-ons."
+  },
+  {
+   "start": 8.778,
+   "end": 31.769,
+   "chapter": "Where we start",
+   "text": "Every label Auto Mode lets a NodePool select on: family, size, vCPUs, memory, generation, GPUs. The closest to speed is the vendor's clock rate. Nothing on measured performance, caches, or what a unit of performance costs; and Karpenter launches the cheapest allowed type."
+  },
+  {
+   "start": 31.769,
+   "end": 56.811,
+   "chapter": "Install sc-karpenter-nodepool",
+   "text": "The controller from the v0.1.1 release. It runs on Auto Mode's general-purpose pool and reads the public Spare Cores API: specs, prices and benchmark results of every instance type."
+  },
+  {
+   "start": 56.811,
+   "end": 62.516,
+   "chapter": "GILty on a hand-picked instance",
+   "text": "GILty is a Python app held back by the GIL: it learns Moby-Dick as a Markov chain and babbles in its style, one dependent hash lookup after the other, so only a faster core and cache make it faster. The team picked r5a.large for it by hand (\"memory-optimized, for Python\"): a plain Karpenter NodePool pinned to that type."
+  },
+  {
+   "start": 62.516,
+   "end": 80.228,
+   "chapter": "GILty on a hand-picked instance",
+   "text": "Auto Mode launches the r5a.large. Time-lapse."
+  },
+  {
+   "start": 80.228,
+   "end": 102.509,
+   "chapter": "GILty on a hand-picked instance",
+   "text": "Its speed, every five seconds, in real time: the CPU, then words per second, then a sample of the babble."
+  },
+  {
+   "start": 102.509,
+   "end": 108.832,
+   "chapter": "Let Spare Cores pick",
+   "text": "Same budget, measured data: the fastest single core (Geekbench 6) with a fast cache (at least 30,000 MB/s of single-threaded cached reads, PassMark), for no more than the r5a.large costs today: $0.1266/h, Auto Mode fee included. No Karpenter label can say any of this."
+  },
+  {
+   "start": 108.832,
+   "end": 136.294,
+   "chapter": "Let Spare Cores pick",
+   "text": "The controller generated a plain Karpenter NodePool with the instance types that qualify."
+  },
+  {
+   "start": 136.294,
+   "end": 142.11,
+   "chapter": "Side by side",
+   "text": "A second, identical GILty, on the pool Spare Cores picked. The first one keeps running on its r5a.large."
+  },
+  {
+   "start": 142.11,
+   "end": 166.248,
+   "chapter": "Side by side",
+   "text": "Time-lapse."
+  },
+  {
+   "start": 166.248,
+   "end": 200.11,
+   "chapter": "Side by side",
+   "text": "Both copies, live, every five seconds: the same program on the hand-picked r5a.large (EPYC 7571) and on the c8a.large (EPYC 9R45) Spare Cores picked, which costs less."
+  }
+ ]
+}

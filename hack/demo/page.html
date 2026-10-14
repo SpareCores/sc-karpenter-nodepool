@@ -1,0 +1,156 @@
+<title>GILty on sc-karpenter-nodepool</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Sans+Condensed:wght@600&display=swap">
+<style>
+/* asciinema-player 3.8.0 (Apache-2.0), inlined: the page may load scripts from a CDN, not stylesheets. */
+{{PLAYER_CSS}}
+</style>
+<style>
+/* Layout: one column; the terminal is the page, notes under it like captions, chapters as a jump list. */
+:root {
+  --bg: #f3f4f6;
+  --surface: #ffffff;
+  --fg: #161a21;
+  --muted: #5a6270;
+  --line: #d9dde3;
+  --accent: #a3460c;
+  --accent-soft: #f6e7dc;
+  --term: #121418;
+  --font-display: "IBM Plex Sans Condensed", "IBM Plex Sans", "Helvetica Neue", Arial, sans-serif;
+  --font-body: "IBM Plex Sans", "Helvetica Neue", Arial, sans-serif;
+  --font-mono: "IBM Plex Mono", ui-monospace, "SFMono-Regular", Menlo, Consolas, monospace;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #0e1014; --surface: #171a20; --fg: #e7e9ed; --muted: #9aa1ad; --line: #2a2f38;
+    --accent: #f0955a; --accent-soft: #2e2018; --term: #0a0b0e; color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #0e1014; --surface: #171a20; --fg: #e7e9ed; --muted: #9aa1ad; --line: #2a2f38;
+  --accent: #f0955a; --accent-soft: #2e2018; --term: #0a0b0e; color-scheme: dark;
+}
+html, body { background: var(--bg); color: var(--fg); }
+body { font: 400 15px/1.55 var(--font-body); }
+.wrap { max-width: 1120px; margin: 0 auto; padding-inline: 16px; padding-block: 28px 40px; display: grid; gap: 18px; }
+header { display: flex; flex-wrap: wrap; align-items: baseline; justify-content: space-between; gap: 6px 24px; }
+h1 { font: 600 clamp(22px, 3.2vw, 30px)/1.15 var(--font-display); letter-spacing: 0.01em; margin: 0; text-wrap: balance; }
+h1 .app { color: var(--accent); }
+.lede { margin: 0; color: var(--muted); max-width: 62ch; }
+.links { display: flex; gap: 16px; font-size: 14px; }
+a { color: var(--accent); text-underline-offset: 3px; }
+.stage { background: var(--term); border-radius: 6px; overflow: hidden; border: 1px solid var(--line); }
+.stage .ap-wrapper, .stage .ap-player { background: var(--term); }
+.caption { display: grid; grid-template-columns: auto 1fr auto; gap: 14px; align-items: start; background: var(--surface);
+  border: 1px solid var(--line); border-left: 3px solid var(--accent); border-radius: 4px; padding: 12px 14px; min-height: 4.6em; }
+.caption .chap { font: 500 12px/1.4 var(--font-mono); text-transform: uppercase; letter-spacing: 0.06em; color: var(--accent); padding-top: 3px; white-space: nowrap; }
+.caption .text { min-width: 0; max-width: 78ch; }
+.caption[hidden] { display: none; }
+.toggle { display: inline-flex; gap: 8px; align-items: center; font-size: 14px; color: var(--muted); cursor: pointer; user-select: none; }
+.toggle input { accent-color: var(--accent); width: 16px; height: 16px; margin: 0; }
+.bar { display: flex; flex-wrap: wrap; justify-content: space-between; align-items: center; gap: 10px 20px; }
+.keys { font-size: 13px; color: var(--muted); }
+kbd { font: 500 12px var(--font-mono); border: 1px solid var(--line); border-bottom-width: 2px; border-radius: 3px; padding: 0 5px; background: var(--surface); color: var(--fg); }
+nav ol { list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: repeat(auto-fill, minmax(230px, 1fr)); gap: 8px; }
+nav button { width: 100%; text-align: left; display: flex; gap: 10px; align-items: baseline; font: 500 14px/1.35 var(--font-body);
+  color: var(--fg); background: var(--surface); border: 1px solid var(--line); border-radius: 4px; padding: 9px 12px; cursor: pointer; }
+nav button .t { font: 400 12px var(--font-mono); color: var(--muted); font-variant-numeric: tabular-nums; min-width: 3.2em; }
+nav button:hover { border-color: var(--accent); }
+nav button[aria-current="true"] { border-color: var(--accent); background: var(--accent-soft); }
+button:focus-visible, .toggle input:focus-visible, a:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.console { font-size: 13px; color: var(--muted); }
+.console code { font: 400 13px var(--font-mono); color: var(--fg); background: var(--surface); border: 1px solid var(--line); border-radius: 3px; padding: 1px 6px; overflow-wrap: anywhere; }
+@media (max-width: 640px) { .caption { grid-template-columns: 1fr; gap: 4px; } .caption .chap { padding-top: 0; } }
+</style>
+
+<div class="wrap">
+  <header>
+    <div>
+      <h1>Same budget, five times the speed for <span class="app">GILty</span></h1>
+      <p class="lede">GILty is a Python app that can use only one core. On a live EKS Auto Mode cluster, sc-karpenter-nodepool picks its instance type by measured single-core speed, cache and price: a c8a.large that runs it 5&times; faster than the hand-picked r5a.large, for less.</p>
+    </div>
+    <div class="links">
+      <a href="https://github.com/SpareCores/sc-karpenter-nodepool" target="_blank" rel="noopener">Repository</a>
+      <a href="https://github.com/SpareCores/sc-karpenter-nodepool/blob/main/docs/reference/selectors.md" target="_blank" rel="noopener">Selectors</a>
+    </div>
+  </header>
+
+  <div class="stage" id="player" aria-label="Terminal recording"></div>
+
+  <div class="bar">
+    <label class="toggle" for="notes-toggle"><input type="checkbox" id="notes-toggle" checked> Show notes <kbd>N</kbd></label>
+    <span class="keys"><kbd>Space</kbd> pause · <kbd>←</kbd><kbd>→</kbd> 5 s · <kbd>[</kbd><kbd>]</kbd> chapters · <kbd>F</kbd> full screen</span>
+  </div>
+
+  <div class="caption" id="caption" aria-live="polite">
+    <span class="chap" id="caption-chapter">Notes</span>
+    <span class="text" id="caption-text">Press play. Notes on what is happening appear here.</span>
+  </div>
+
+  <nav aria-label="Chapters"><ol id="chapters"></ol></nav>
+
+  <p class="console">In a terminal: <code>asciinema play demo.cast</code> (or <code>demo-annotated.cast</code>, with the notes as comments). Everything shown was recorded live; long waits are time-lapsed.</p>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/asciinema-player@3.8.0/dist/bundle/asciinema-player.min.js"></script>
+<script>
+(async function () {
+  const fmt = (s) => `${Math.floor(s / 60)}:${String(Math.floor(s % 60)).padStart(2, "0")}`;
+  let data = { chapters: [], notes: [] };
+  try { data = await (await fetch("annotations.json")).json(); } catch (e) { /* notes are optional */ }
+
+  try { await document.fonts.load('15px "IBM Plex Mono"'); } catch (e) { /* the fallback font works too */ }
+  const player = AsciinemaPlayer.create("demo.cast", document.getElementById("player"), {
+    fit: "width",
+    terminalFontFamily: '"IBM Plex Mono", ui-monospace, Menlo, Consolas, monospace',
+    poster: "npt:0:6",
+    preload: true,
+  });
+
+  const caption = document.getElementById("caption");
+  const capChapter = document.getElementById("caption-chapter");
+  const capText = document.getElementById("caption-text");
+  const toggle = document.getElementById("notes-toggle");
+  const list = document.getElementById("chapters");
+
+  let show = true;
+  try { show = localStorage.getItem("sckn-demo-notes") !== "off"; } catch (e) {}
+  const setShow = (v) => {
+    show = v; toggle.checked = v; caption.hidden = !v;
+    try { localStorage.setItem("sckn-demo-notes", v ? "on" : "off"); } catch (e) {}
+  };
+  setShow(show);
+  toggle.addEventListener("change", () => setShow(toggle.checked));
+  document.addEventListener("keydown", (e) => {
+    if ((e.key === "n" || e.key === "N") && !e.ctrlKey && !e.metaKey && !e.altKey) setShow(!show);
+  });
+
+  const buttons = data.chapters.map((c) => {
+    const li = document.createElement("li");
+    const b = document.createElement("button");
+    b.type = "button";
+    b.innerHTML = `<span class="t">${fmt(c.start)}</span><span></span>`;
+    b.lastChild.textContent = c.label;
+    b.addEventListener("click", () => { player.seek(c.start + 0.01); player.play(); });
+    li.appendChild(b); list.appendChild(li);
+    return b;
+  });
+
+  let last = -1;
+  setInterval(async () => {
+    let t;
+    try { t = await Promise.resolve(player.getCurrentTime()); } catch (e) { return; }
+    if (typeof t !== "number") return;
+    let ci = -1;
+    data.chapters.forEach((c, i) => { if (t >= c.start - 0.05) ci = i; });
+    buttons.forEach((b, i) => b.setAttribute("aria-current", i === ci ? "true" : "false"));
+    let ni = -1;
+    data.notes.forEach((n, i) => { if (t >= n.start - 0.05) ni = i; });
+    if (ni !== last) {
+      last = ni;
+      if (ni >= 0) { capChapter.textContent = data.notes[ni].chapter || "Notes"; capText.textContent = data.notes[ni].text; }
+    }
+  }, 250);
+})();
+</script>

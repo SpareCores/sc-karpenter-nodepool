@@ -35,6 +35,17 @@ This yields a NodePool restricted to the fastest single-core families up to
 $0.50 an hour, with every size of each, refreshed daily with churn control so
 running nodes are not replaced needlessly.
 
+## Demo
+
+[![GILty on a hand-picked r5a.large and on the c8a.large sc-karpenter-nodepool picked, side by side](docs/demo/demo.svg)](docs/demo/README.md)
+
+[GILty](https://github.com/SpareCores/GILty), a Python app that can use only
+one core, runs on an `r5a.large` picked by hand. An `SCNodePool` asks for the
+fastest single core with a fast cache for no more than that, and gets a
+`c8a.large`: the same program runs 5.1× faster there, on a cheaper instance.
+Recorded live on EKS Auto Mode; [watch it with pause, seek and
+notes](docs/demo/README.md).
+
 ## Features
 
 - Selectors on CPU (flags, caches, manufacturer, SMT, clock), memory,
