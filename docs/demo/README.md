@@ -1,6 +1,6 @@
 # Demo: same budget, five times the speed for GILty
 
-[![The demo: sc-karpenter-nodepool on EKS Auto Mode](demo.svg)](index.html)
+[![The demo: sc-karpenter-nodepool on EKS Auto Mode](demo.svg)](https://sparecores.github.io/sc-karpenter-nodepool/demo/)
 
 [GILty](https://github.com/SpareCores/GILty) is a Python app that cannot use
 more than one CPU: it learns *Moby-Dick* as a Markov chain and babbles in its
