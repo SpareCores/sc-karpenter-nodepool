@@ -32,10 +32,10 @@ import (
 
 	karpenterv1alpha1 "github.com/SpareCores/sc-karpenter-nodepool/api/v1alpha1"
 	"github.com/SpareCores/sc-karpenter-nodepool/internal/controller"
-	"github.com/SpareCores/sc-karpenter-nodepool/internal/keeper"
 	"github.com/SpareCores/sc-karpenter-nodepool/internal/nodepool"
 	"github.com/SpareCores/sc-karpenter-nodepool/internal/providers"
 	"github.com/SpareCores/sc-karpenter-nodepool/internal/version"
+	keeper "github.com/SpareCores/sc-keeper-go"
 	// +kubebuilder:scaffold:imports
 )
 
@@ -194,7 +194,10 @@ func main() {
 		setupLog.Error(err, "Failed to read the Keeper API key")
 		os.Exit(1)
 	}
-	keeperOpts := []keeper.Option{keeper.WithHTTPClient(controller.NewKeeperHTTPClient(keeperTimeout))}
+	keeperOpts := []keeper.Option{
+		keeper.WithUserAgent("sc-karpenter-nodepool"),
+		keeper.WithHTTPClient(controller.NewKeeperHTTPClient(keeperTimeout)),
+	}
 	if apiKey != "" {
 		keeperOpts = append(keeperOpts, keeper.WithAPIKey(apiKey))
 		if regionsPerRequest < 0 {

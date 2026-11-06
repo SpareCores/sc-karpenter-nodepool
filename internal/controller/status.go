@@ -18,7 +18,7 @@ import (
 
 	"github.com/SpareCores/sc-karpenter-nodepool/api/v1alpha1"
 	"github.com/SpareCores/sc-karpenter-nodepool/internal/providers"
-	"github.com/SpareCores/sc-karpenter-nodepool/internal/selection"
+	"github.com/SpareCores/sc-keeper-go/selection"
 )
 
 // maxConditionMessage is the API limit of metav1.Condition.Message.

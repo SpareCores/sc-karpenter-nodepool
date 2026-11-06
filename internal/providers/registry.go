@@ -11,10 +11,11 @@ import (
 	"fmt"
 	"slices"
 
+	selapi "github.com/SpareCores/sc-keeper-go/selection/api"
+
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 
-	"github.com/SpareCores/sc-karpenter-nodepool/api/v1alpha1"
-	"github.com/SpareCores/sc-karpenter-nodepool/internal/selection"
+	"github.com/SpareCores/sc-keeper-go/selection"
 )
 
 // regionMapping is how a Kubernetes region value maps to a Keeper region id
@@ -42,7 +43,7 @@ type adapter struct {
 	crossCheckOnly bool
 	multiRegion    bool
 	mapping        regionMapping
-	archFromClass  func(*unstructured.Unstructured) ([]v1alpha1.Architecture, bool)
+	archFromClass  func(*unstructured.Unstructured) ([]selapi.Architecture, bool)
 	requirements   RequirementRules
 	managedFee     bool
 }
@@ -93,7 +94,7 @@ func (a *adapter) ToKeeperRegion(k8sRegion string, regions *RegionIndex) (string
 	return id, nil
 }
 
-func (a *adapter) ArchitecturesFromNodeClass(nc *unstructured.Unstructured) ([]v1alpha1.Architecture, bool) {
+func (a *adapter) ArchitecturesFromNodeClass(nc *unstructured.Unstructured) ([]selapi.Architecture, bool) {
 	if a.archFromClass == nil || nc == nil {
 		return nil, false
 	}
@@ -120,8 +121,8 @@ func (a *adapter) ManagedFees(ctx context.Context, src FeeSource, k8sRegion stri
 }
 
 var (
-	bothArchs    = []v1alpha1.Architecture{v1alpha1.ArchitectureAMD64, v1alpha1.ArchitectureARM64}
-	amd64Only    = []v1alpha1.Architecture{v1alpha1.ArchitectureAMD64}
+	bothArchs    = []selapi.Architecture{selapi.ArchitectureAMD64, selapi.ArchitectureARM64}
+	amd64Only    = []selapi.Architecture{selapi.ArchitectureAMD64}
 	onDemandOnly = []string{CapacityTypeOnDemand}
 	onDemandSpot = []string{CapacityTypeOnDemand, CapacityTypeSpot}
 	awsCapacity  = []string{CapacityTypeOnDemand, CapacityTypeSpot, CapacityTypeReserved}
@@ -131,7 +132,7 @@ var (
 
 // pinnedOnDemand are the rules of the providers that launch on-demand only
 // ("always" in §6.4: a template asking for spot is rejected).
-func pinnedOnDemand(archs []v1alpha1.Architecture) RequirementRules {
+func pinnedOnDemand(archs []selapi.Architecture) RequirementRules {
 	return RequirementRules{
 		DefaultCapacityType:  CapacityTypeOnDemand,
 		AllowedCapacityTypes: onDemandOnly,

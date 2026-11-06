@@ -13,6 +13,7 @@ go 1.26.6
 require (
 	github.com/Azure/karpenter-provider-azure v1.14.3
 	github.com/SpareCores/sc-karpenter-nodepool v0.0.0
+	github.com/SpareCores/sc-keeper-go v0.1.0
 	github.com/aws/aws-sdk-go-v2/service/ec2 v1.311.0
 	github.com/aws/karpenter-provider-aws v1.14.1
 	github.com/awslabs/operatorpkg v0.0.0-20260708223819-4da4c353c5fa

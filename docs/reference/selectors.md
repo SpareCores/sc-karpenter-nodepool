@@ -4,6 +4,12 @@ How an `SCNodePool` selects instance types from Spare Cores data: every
 selector field, which Spare Cores field it reads, units, semantics, coverage per
 vendor, and the ranking and data-quality rules applied on top.
 
+> The selector and ranking objects, and the engine that evaluates them, are
+> implemented in the shared Go module
+> [sc-keeper-go](https://github.com/SpareCores/sc-keeper-go) (`selection` and
+> `selection/api`). SCarpenter embeds the same `selector` and `ranking` objects
+> in its own CRDs, so everything on this page applies to it unchanged.
+
 ## Table of Contents
 
 - [Terminology](#terminology)

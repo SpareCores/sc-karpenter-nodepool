@@ -17,6 +17,8 @@ import (
 	"testing"
 	"time"
 
+	selapi "github.com/SpareCores/sc-keeper-go/selection/api"
+
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -80,8 +82,8 @@ func mustRender(t *testing.T, in Input) *Rendered {
 }
 
 var (
-	amd64 = v1alpha1.ArchitectureAMD64
-	arm64 = v1alpha1.ArchitectureARM64
+	amd64 = selapi.ArchitectureAMD64
+	arm64 = selapi.ArchitectureARM64
 )
 
 // TestGolden renders one NodePool per adapter from synthetic selections
@@ -96,7 +98,7 @@ func TestGolden(t *testing.T) {
 		top    string // top-level spec fields, JSON
 		labels map[string]string
 		types  []string
-		archs  []v1alpha1.Architecture
+		archs  []selapi.Architecture
 		zones  []string
 	}{
 		{
@@ -107,52 +109,52 @@ func TestGolden(t *testing.T) {
 			top:    `"weight":50,"disruption":{"consolidationPolicy":"WhenEmptyOrUnderutilized","consolidateAfter":"1m"},"limits":{"cpu":"256"}`,
 			labels: map[string]string{"team": "web"},
 			types:  []string{"c7a.xlarge", "c7a.large", "m7a.large", "m7g.large"},
-			archs:  []v1alpha1.Architecture{amd64, arm64},
+			archs:  []selapi.Architecture{amd64, arm64},
 		},
 		{
 			id: providers.AWSAutoMode, group: "eks.amazonaws.com", kind: "NodeClass",
 			extra: `"requirements":[{"key":"topology.k8s.aws/zone-id","operator":"In","values":["use1-az1","use1-az2"]}]`,
-			types: []string{"c7i.large", "m7g.xlarge"}, archs: []v1alpha1.Architecture{amd64, arm64},
+			types: []string{"c7i.large", "m7g.xlarge"}, archs: []selapi.Architecture{amd64, arm64},
 		},
 		{
 			id: providers.Azure, group: "karpenter.azure.com", kind: "AKSNodeClass",
 			extra: `"requirements":[{"key":"topology.kubernetes.io/zone","operator":"In","values":["westeurope-1","westeurope-2"]}]`,
-			types: []string{"Standard_D2as_v5", "Standard_D4as_v5"}, archs: []v1alpha1.Architecture{amd64},
+			types: []string{"Standard_D2as_v5", "Standard_D4as_v5"}, archs: []selapi.Architecture{amd64},
 		},
 		{
 			id: providers.GCP, group: "karpenter.k8s.gcp", kind: "GCENodeClass",
-			types: []string{"n2d-standard-2", "c3-standard-4"}, archs: []v1alpha1.Architecture{amd64},
+			types: []string{"n2d-standard-2", "c3-standard-4"}, archs: []selapi.Architecture{amd64},
 		},
 		{
 			id: providers.AlicloudACK, group: "karpenter.alibabacloud.com", kind: "ECSNodeClass",
 			extra: `"requirements":[{"key":"karpenter.sh/capacity-type","operator":"In","values":["spot"]}]`,
-			types: []string{"ecs.g7.large", "ecs.c7.xlarge"}, archs: []v1alpha1.Architecture{amd64},
+			types: []string{"ecs.g7.large", "ecs.c7.xlarge"}, archs: []selapi.Architecture{amd64},
 		},
 		{
 			id: providers.AlicloudCloudpilot, group: "karpenter.k8s.alibabacloud", kind: "ECSNodeClass",
 			extra: `"requirements":[{"key":"kubernetes.io/arch","operator":"In","values":["arm64"]}]`,
-			types: []string{"ecs.g8y.large", "ecs.c8y.xlarge"}, archs: []v1alpha1.Architecture{arm64},
+			types: []string{"ecs.g8y.large", "ecs.c8y.xlarge"}, archs: []selapi.Architecture{arm64},
 		},
 		{
 			id: providers.Hcloud, group: "karpenter.hetzner.cloud", kind: "HCloudNodeClass",
-			types: []string{"cx22", "cpx31", "cax21"}, archs: []v1alpha1.Architecture{amd64, arm64},
+			types: []string{"cx22", "cpx31", "cax21"}, archs: []selapi.Architecture{amd64, arm64},
 		},
 		{
 			id: providers.HcloudItsh, group: "karpenter.itsh.dev", kind: "HCloudNodeClass",
-			types: []string{"cx22", "cpx31"}, archs: []v1alpha1.Architecture{amd64},
+			types: []string{"cx22", "cpx31"}, archs: []selapi.Architecture{amd64},
 		},
 		{
 			id: providers.UpCloud, group: "karpenter.k8s.upcloud", kind: "UpCloudNodeClass",
-			types: []string{"CLOUDNATIVE-2xCPU-4GB", "DEV-1xCPU-2GB"}, archs: []v1alpha1.Architecture{amd64},
+			types: []string{"CLOUDNATIVE-2xCPU-4GB", "DEV-1xCPU-2GB"}, archs: []selapi.Architecture{amd64},
 		},
 		{
 			id: providers.OVH, group: "karpenter.ovhcloud.sh", kind: "OVHNodeClass",
-			types: []string{"b3-8", "c3-4"}, archs: []v1alpha1.Architecture{amd64}, zones: []string{"gra11-a"},
+			types: []string{"b3-8", "c3-4"}, archs: []selapi.Architecture{amd64}, zones: []string{"gra11-a"},
 		},
 		{
 			id: providers.Vultr, group: "karpenter.vultr.com", kind: "VultrNodeClass",
 			extra: `"requirements":[{"key":"node.kubernetes.io/instance-type","operator":"In","values":["vc2-2c-4gb","vc2-4c-8gb"],"minValues":1}]`,
-			types: []string{"vc2-2c-4gb", "vhf-2c-4gb"}, archs: []v1alpha1.Architecture{amd64},
+			types: []string{"vc2-2c-4gb", "vhf-2c-4gb"}, archs: []selapi.Architecture{amd64},
 		},
 	}
 	for _, c := range cases {
@@ -225,7 +227,7 @@ func renderDefaults(t *testing.T) {
 	out := mustRender(t, Input{
 		SCNodePool:    scNodePool("p", templateSpec("karpenter.k8s.aws", "EC2NodeClass", ""), nil),
 		InstanceTypes: []string{"m7g.large", "c7a.large", "c7a.large"},
-		Architectures: []v1alpha1.Architecture{arm64, amd64},
+		Architectures: []selapi.Architecture{arm64, amd64},
 		Rules:         aws,
 	})
 	if !slices.Equal(out.InstanceTypes, []string{"c7a.large", "m7g.large"}) {
@@ -270,7 +272,7 @@ func renderUserRequirements(t *testing.T) {
 	out := mustRender(t, Input{
 		SCNodePool:    scNodePool("p", templateSpec("karpenter.k8s.aws", "EC2NodeClass", extra), map[string]string{LabelManagedBy: "someone"}),
 		InstanceTypes: []string{"c7a.large", "c7a.xlarge", "c7a.2xlarge", "m7a.large"},
-		Architectures: []v1alpha1.Architecture{amd64},
+		Architectures: []selapi.Architecture{amd64},
 		Rules:         aws,
 	})
 	if !slices.Equal(out.InstanceTypes, []string{"c7a.large", "c7a.xlarge"}) {
@@ -301,7 +303,7 @@ func renderForcedZones(t *testing.T) {
 	ovh := rulesOf(t, providers.OVH)
 	in := Input{
 		SCNodePool:    scNodePool("p", templateSpec("karpenter.ovhcloud.sh", "OVHNodeClass", ""), nil),
-		InstanceTypes: []string{"b3-8"}, Architectures: []v1alpha1.Architecture{amd64},
+		InstanceTypes: []string{"b3-8"}, Architectures: []selapi.Architecture{amd64},
 		Rules: ovh, ForcedZones: []string{"gra11-b", "gra11-a"},
 	}
 	if r, n := requirement(t, mustRender(t, in).NodePool, providers.LabelZone); n != 1 || !slices.Equal(r.Values, []string{"gra11-a", "gra11-b"}) {
@@ -375,7 +377,7 @@ func TestRenderErrors(t *testing.T) {
 		kind  string
 		extra string
 		types []string
-		archs []v1alpha1.Architecture
+		archs []selapi.Architecture
 		want  error
 	}{
 		{"never-emit key", providers.AWSAutoMode, "eks.amazonaws.com", "NodeClass",
@@ -388,7 +390,7 @@ func TestRenderErrors(t *testing.T) {
 			`"requirements":[{"key":"karpenter.sh/capacity-type","operator":"NotIn","values":["reserved"]}]`,
 			[]string{"ecs.g7.large"}, nil, providers.ErrCapacityTypeUnsupported},
 		{"two architectures on cloudpilot Alibaba", providers.AlicloudCloudpilot, "karpenter.k8s.alibabacloud", "ECSNodeClass", "",
-			[]string{"ecs.g7.large", "ecs.g8y.large"}, []v1alpha1.Architecture{amd64, arm64}, providers.ErrArchitectureUnsupported},
+			[]string{"ecs.g7.large", "ecs.g8y.large"}, []selapi.Architecture{amd64, arm64}, providers.ErrArchitectureUnsupported},
 		{"template arm64 on an amd64-only provider", providers.Vultr, "karpenter.vultr.com", "VultrNodeClass",
 			`"requirements":[{"key":"kubernetes.io/arch","operator":"In","values":["arm64"]}]`,
 			[]string{"vc2-2c-4gb"}, nil, providers.ErrArchitectureUnsupported},
@@ -420,7 +422,7 @@ func nodePoolWith(t *testing.T, extra ...string) *unstructured.Unstructured {
 	return mustRender(t, Input{
 		SCNodePool:    scNodePool("p", spec, nil),
 		InstanceTypes: []string{"c7a.large"},
-		Architectures: []v1alpha1.Architecture{amd64},
+		Architectures: []selapi.Architecture{amd64},
 		Rules:         rulesOf(t, providers.AWS),
 	}).NodePool
 }

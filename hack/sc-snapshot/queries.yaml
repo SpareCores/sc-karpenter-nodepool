@@ -1,0 +1,61 @@
+# The Keeper requests of the committed test snapshot (test/data/sc-snapshot),
+# as a query list of sc-keeper-go's cmd/sc-snapshot (format: package
+# github.com/SpareCores/sc-keeper-go/snapshot). One test region per vendor, the
+# region, zone and benchmark tables, the on-demand (and spot) /servers listings
+# and one /servers listing per benchmark. The "Refresh Spare Cores snapshot"
+# workflow runs it, then hack/sc-snapshot/eks-fees.py adds the EKS Auto Mode
+# fees; internal/testsnapshot checks that this list reproduces the committed
+# manifest.
+vendors:
+  # region is a region_id, api_reference or alias of /table/region (GCP and
+  # Hetzner ids are numeric, hence the lookup).
+  - {name: aws, region: us-east-1, spot: true}
+  - {name: azure, region: westeurope, spot: true}
+  - {name: gcp, region: us-central1, spot: true}
+  - {name: alicloud, region: eu-central-1, spot: true}
+  - {name: hcloud, region: fsn1}
+  - {name: ovh, region: GRA11}
+  - {name: upcloud, region: de-fra1}
+  - {name: vultr, region: ewr}
+
+# The benchmarks the tests select and rank on: single- and multi-core CPU, a
+# composite profile and one lower-is-better metric. Configs are matched against
+# /benchmark_configs by value; the canonical string is sent.
+benchmarks:
+  - {id: "geekbench:score", config: {cores: single}}
+  - {id: "passmark:cpu_single_threaded_test"}
+  - {id: "stress_ng:bestn"}
+  - {id: "workload_profile:web"}
+  - {id: "membench:latency", config: {scope: RAM}}
+
+queries:
+  - {name: tables/region, path: /table/region}
+  - {name: tables/zone, path: /table/zone}
+  - {name: benchmark_configs, path: /benchmark_configs}
+
+vendorQueries:
+  - name: "{vendor}/servers-ondemand"
+    path: /servers
+    params:
+      vendor: "{vendor}"
+      vendor_regions: "{vendor}~{region_id}"
+      limit: -1
+      best_price_allocation: ONDEMAND_ONLY
+  - name: "{vendor}/servers-spot"
+    path: /servers
+    requiresSpot: true
+    params:
+      vendor: "{vendor}"
+      vendor_regions: "{vendor}~{region_id}"
+      limit: -1
+      best_price_allocation: SPOT_ONLY
+  - name: "{vendor}/benchmark-{benchmark_slug}"
+    path: /servers
+    benchmarks: true
+    params:
+      vendor: "{vendor}"
+      vendor_regions: "{vendor}~{region_id}"
+      limit: -1
+      best_price_allocation: ONDEMAND_ONLY
+      benchmark_id: "{benchmark_id}"
+      benchmark_config: "{benchmark_config}"

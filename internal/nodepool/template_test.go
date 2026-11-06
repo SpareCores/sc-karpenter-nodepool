@@ -12,6 +12,8 @@ import (
 	"testing"
 	"time"
 
+	selapi "github.com/SpareCores/sc-keeper-go/selection/api"
+
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -86,24 +88,24 @@ func TestTemplateConstraints(t *testing.T) {
 	cases := []struct {
 		name      string
 		extra     string
-		archs     []v1alpha1.Architecture
+		archs     []selapi.Architecture
 		capacity  []string
-		basis     v1alpha1.PriceBasis
+		basis     selapi.PriceBasis
 		typeLimit bool
 		zone      bool
 	}{
-		{name: "none", basis: v1alpha1.PriceBasisOnDemand},
-		{name: "Exists does not restrict", extra: reqs(r(arch, OpExists), r(ct, OpExists)), basis: v1alpha1.PriceBasisOnDemand},
+		{name: "none", basis: selapi.PriceBasisOnDemand},
+		{name: "Exists does not restrict", extra: reqs(r(arch, OpExists), r(ct, OpExists)), basis: selapi.PriceBasisOnDemand},
 		{name: "In", extra: reqs(r(arch, OpIn, "arm64"), r(ct, OpIn, "spot")),
-			archs: []v1alpha1.Architecture{arm64}, capacity: []string{"spot"}, basis: v1alpha1.PriceBasisSpot},
+			archs: []selapi.Architecture{arm64}, capacity: []string{"spot"}, basis: selapi.PriceBasisSpot},
 		{name: "NotIn subtracts from the universe", extra: reqs(r(arch, OpNotIn, "arm64"), r(ct, OpNotIn, "on-demand")),
-			archs: []v1alpha1.Architecture{amd64}, capacity: []string{"spot"}, basis: v1alpha1.PriceBasisSpot},
+			archs: []selapi.Architecture{amd64}, capacity: []string{"spot"}, basis: selapi.PriceBasisSpot},
 		{name: "In and NotIn intersect", extra: reqs(r(ct, OpIn, "spot", "on-demand"), r(ct, OpNotIn, "spot")),
-			capacity: []string{"on-demand"}, basis: v1alpha1.PriceBasisOnDemand},
+			capacity: []string{"on-demand"}, basis: selapi.PriceBasisOnDemand},
 		{name: "DoesNotExist allows nothing", extra: reqs(r(arch, OpDoesNotExist)),
-			archs: []v1alpha1.Architecture{}, basis: v1alpha1.PriceBasisOnDemand},
+			archs: []selapi.Architecture{}, basis: selapi.PriceBasisOnDemand},
 		{name: "instance types and zones", extra: reqs(r(it, OpIn, "a", "b"), r(LabelZoneID, OpIn, "use1-az1")),
-			basis: v1alpha1.PriceBasisOnDemand, typeLimit: true, zone: true},
+			basis: selapi.PriceBasisOnDemand, typeLimit: true, zone: true},
 	}
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {

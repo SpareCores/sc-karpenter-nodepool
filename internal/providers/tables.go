@@ -10,7 +10,7 @@ import (
 	"slices"
 	"strings"
 
-	"github.com/SpareCores/sc-karpenter-nodepool/internal/keeper"
+	keeper "github.com/SpareCores/sc-keeper-go"
 )
 
 // RegionIndex looks up the Spare Cores region table (/table/region) per

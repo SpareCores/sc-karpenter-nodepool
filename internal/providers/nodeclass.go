@@ -9,9 +9,9 @@ package providers
 import (
 	"strings"
 
-	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
+	selapi "github.com/SpareCores/sc-keeper-go/selection/api"
 
-	"github.com/SpareCores/sc-karpenter-nodepool/api/v1alpha1"
+	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 )
 
 // The NodeClass field paths of overview §6.3, checked against the provider
@@ -117,14 +117,14 @@ func fromString(path string) nodeClassRegions {
 
 // hcloudResolvedArchitectures reads status.resolvedImages[].architecture of
 // a Hetzner NodeClass: stubbi spells it x86/arm, echohello amd64/arm64.
-func hcloudResolvedArchitectures(nc *unstructured.Unstructured) ([]v1alpha1.Architecture, bool) {
-	var out []v1alpha1.Architecture
+func hcloudResolvedArchitectures(nc *unstructured.Unstructured) ([]selapi.Architecture, bool) {
+	var out []selapi.Architecture
 	for _, a := range listFields(nc, "status.resolvedImages", "architecture") {
 		switch a {
 		case "x86", "amd64":
-			out = append(out, v1alpha1.ArchitectureAMD64)
+			out = append(out, selapi.ArchitectureAMD64)
 		case "arm", "arm64":
-			out = append(out, v1alpha1.ArchitectureARM64)
+			out = append(out, selapi.ArchitectureARM64)
 		}
 	}
 	out = dedupe(out)

@@ -43,8 +43,8 @@ fully before starting. Every plan assumes you did.
 ```
 api/v1alpha1/                 SCNodePool types (kubebuilder markers)
 cmd/main.go                   manager entrypoint
-internal/keeper/              Keeper API client (+ keepertest: snapshot replay server)
-internal/selection/           candidates, selectors, ranking, churn (pure functions)
+(github.com/SpareCores/sc-keeper-go: Keeper client, keepertest, selection, selection/api)
+internal/testsnapshot/        replay server of the committed snapshot (+ EKS price list)
 internal/providers/           provider adapters (detection, eligibility, regions, rules)
 internal/nodepool/            NodePool rendering and validation
 internal/controller/          reconcilers
@@ -52,7 +52,7 @@ config/                       generated CRDs, RBAC, manager manifests (kustomize
 charts/sc-karpenter-nodepool/ Helm chart (plan 07)
 hack/devcontainer/            dev container image
 hack/dev.sh                   run a command in the dev container
-hack/sc-snapshot/fetch.py     snapshot fetcher (existing)
+hack/sc-snapshot/queries.yaml query list of sc-keeper-go's cmd/sc-snapshot; eks-fees.py adds the EKS fees
 test/data/sc-snapshot/        committed Keeper responses (existing; refreshed only by its workflow)
 test/crd/, test/kwok/         L2 / L3 lanes (plan 05)
 test/e2e-aws/                 L5 scripts (plan 06)
@@ -77,7 +77,7 @@ for Go module and build caches, `--network host`, and the Docker socket mounted
 ```bash
 hack/dev.sh make test
 hack/dev.sh make lint
-hack/dev.sh go test ./internal/selection/...
+hack/dev.sh go test ./internal/providers/...
 ```
 
 ## Gates (definition of done)
@@ -96,7 +96,7 @@ Run in this order; all must pass:
 ## Code style
 
 - Go, controller-runtime. Small packages with pure functions where possible
-  (`internal/selection`, `internal/nodepool` have no Kubernetes client).
+  (sc-keeper-go's `selection`, `internal/nodepool` have no Kubernetes client).
 - Comments explain non-obvious intent and trade-offs, never narrate code.
 - Errors: wrap with `fmt.Errorf("...: %w", err)`; no panics in the manager.
 - Tests: table-driven, co-located `_test.go`; envtest for API/reconciler

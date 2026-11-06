@@ -10,7 +10,7 @@ import (
 	"fmt"
 	"slices"
 
-	"github.com/SpareCores/sc-karpenter-nodepool/api/v1alpha1"
+	selapi "github.com/SpareCores/sc-keeper-go/selection/api"
 )
 
 // Well-known requirement keys and capacity types (Karpenter core).
@@ -43,7 +43,7 @@ type RequirementRules struct {
 	SingleCapacityType bool
 
 	// AllowedArchitectures are the architectures the provider can launch.
-	AllowedArchitectures []v1alpha1.Architecture
+	AllowedArchitectures []selapi.Architecture
 	// SingleArchitecture: exactly one kubernetes.io/arch value per NodePool
 	// (cloudpilot Alibaba picks the image from the first instance type).
 	SingleArchitecture bool
@@ -89,7 +89,7 @@ func (r RequirementRules) ResolveCapacityTypes(template []string) ([]string, err
 // ResolveArchitectures returns the kubernetes.io/arch values to emit, given
 // the template requirement (nil: none) and the architectures of the
 // selected types. emit is false only when there is nothing to emit.
-func (r RequirementRules) ResolveArchitectures(template, selected []v1alpha1.Architecture) (values []v1alpha1.Architecture, emit bool, err error) {
+func (r RequirementRules) ResolveArchitectures(template, selected []selapi.Architecture) (values []selapi.Architecture, emit bool, err error) {
 	if template != nil {
 		for _, a := range template {
 			if !slices.Contains(r.AllowedArchitectures, a) {

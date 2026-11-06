@@ -10,7 +10,7 @@ import (
 	"slices"
 	"strings"
 
-	"github.com/SpareCores/sc-karpenter-nodepool/internal/selection"
+	"github.com/SpareCores/sc-keeper-go/selection"
 )
 
 // Azure's static exclusions, mirrored from the provider at the commit of

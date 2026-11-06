@@ -14,6 +14,8 @@ import (
 	"testing"
 	"time"
 
+	selapi "github.com/SpareCores/sc-keeper-go/selection/api"
+
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -69,7 +71,7 @@ func (v vendorRun) subsetAndNarrowing(t *testing.T) {
 	// must come from the remaining types.
 	used := usedTypes(claims)
 	updatePool(t, pool, func(p *v1alpha1.SCNodePool) {
-		p.Spec.Selector.InstanceTypes = &v1alpha1.GlobFilter{Exclude: slices.Clone(used)}
+		p.Spec.Selector.InstanceTypes = &selapi.GlobFilter{Exclude: slices.Clone(used)}
 	})
 	eventually(t, 2*time.Minute, time.Second, "NodePool narrowed", func() (bool, string) {
 		np, err := getNodePool(pool)

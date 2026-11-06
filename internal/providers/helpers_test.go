@@ -14,9 +14,9 @@ import (
 	"path/filepath"
 	"testing"
 
-	"github.com/SpareCores/sc-karpenter-nodepool/internal/keeper"
-	"github.com/SpareCores/sc-karpenter-nodepool/internal/keeper/keepertest"
-	"github.com/SpareCores/sc-karpenter-nodepool/internal/selection"
+	"github.com/SpareCores/sc-karpenter-nodepool/internal/testsnapshot"
+	keeper "github.com/SpareCores/sc-keeper-go"
+	"github.com/SpareCores/sc-keeper-go/selection"
 )
 
 // The snapshot replay server, its region and zone tables and one Fetcher are
@@ -24,7 +24,7 @@ import (
 var (
 	snapshotURL string
 	fetcher     *keeper.Fetcher
-	manifest    *keepertest.Manifest
+	manifest    *testsnapshot.Manifest
 	regionIx    *RegionIndex
 	zoneIx      *ZoneIndex
 	registry    = NewRegistry()
@@ -32,7 +32,7 @@ var (
 
 func TestMain(m *testing.M) {
 	os.Exit(func() int {
-		h, err := keepertest.NewHandler(keepertest.SnapshotDir())
+		h, err := testsnapshot.NewHandler(testsnapshot.Dir())
 		if err != nil {
 			fmt.Fprintln(os.Stderr, err)
 			return 1
@@ -40,7 +40,10 @@ func TestMain(m *testing.M) {
 		srv := httptest.NewServer(h)
 		defer srv.Close()
 		snapshotURL = srv.URL
-		manifest = h.Manifest()
+		if manifest, err = testsnapshot.LoadManifest(testsnapshot.Dir()); err != nil {
+			fmt.Fprintln(os.Stderr, err)
+			return 1
+		}
 		fetcher = keeper.NewFetcher(keeper.New(srv.URL))
 		ctx := context.Background()
 		regions, err := fetcher.Regions(ctx)
@@ -87,7 +90,7 @@ func snapshotCandidates(t *testing.T, vendor string, alloc keeper.Allocation) []
 // are made up, the names are real AWS types).
 func fixtureFees(t *testing.T) map[string]float64 {
 	t.Helper()
-	fees, err := keepertest.ReadFeeTable(filepath.Join("testdata", "eks-automode-fees.json"))
+	fees, err := testsnapshot.ReadFeeTable(filepath.Join("testdata", "eks-automode-fees.json"))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -98,7 +101,7 @@ func fixtureFees(t *testing.T) map[string]float64 {
 // region when the snapshot has one, else the synthetic fixture.
 func autoModeFees(t *testing.T) (map[string]float64, bool) {
 	t.Helper()
-	region, fees, ok, err := keepertest.AutoModeFees(keepertest.SnapshotDir(), manifest)
+	region, fees, ok, err := testsnapshot.AutoModeFees(testsnapshot.Dir(), manifest)
 	if err != nil {
 		t.Fatal(err)
 	}

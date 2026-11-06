@@ -2,12 +2,13 @@
 # Run a command inside the dev container (hack/devcontainer/Dockerfile).
 #
 #   hack/dev.sh make test
-#   hack/dev.sh go test ./internal/selection/...
+#   hack/dev.sh go test ./internal/providers/...
 #
 # The image is built on first use and rebuilt when the Dockerfile changes. The
 # repository is mounted at /src; Go module and build caches live in a named
 # volume. The Docker socket is mounted so the container can run kind and
-# `docker build`.
+# `docker build`. A sibling ../sc-keeper-go checkout, if present, is mounted
+# read-only next to it (opt-in aid, see below).
 set -euo pipefail
 
 repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
@@ -48,6 +49,17 @@ if [[ -S /var/run/docker.sock ]]; then
   sock_args=(-v /var/run/docker.sock:/var/run/docker.sock --group-add "$(stat -c %g /var/run/docker.sock)")
 fi
 
+# Opt-in aid for developing sc-keeper-go together with this repository: with a
+# temporary `replace github.com/SpareCores/sc-keeper-go => ../sc-keeper-go` in
+# go.mod, the sibling checkout must be visible in the container at the same
+# relative path (the repository is /src, so ../sc-keeper-go is /sc-keeper-go).
+# It is mounted read-only when the directory exists; without a replace
+# directive go.mod uses the tagged module and the mount is unused.
+sibling_args=()
+if [[ -d "${repo_root}/../sc-keeper-go" ]]; then
+  sibling_args=(-v "$(cd "${repo_root}/../sc-keeper-go" && pwd):/sc-keeper-go:ro")
+fi
+
 # Settings of the local test lanes (test/crd/run.sh, test/kwok/run.sh) that
 # pass through when set in the caller's environment.
 env_args=()
@@ -63,6 +75,7 @@ exec docker run --rm "${tty_flags[@]}" \
   --network host \
   "${sock_args[@]}" \
   -v "${repo_root}:/src" \
+  "${sibling_args[@]}" \
   -v "${cache_volume}:/cache" \
   -w /src \
   -e HOME=/cache/home \

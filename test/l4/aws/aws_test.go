@@ -18,6 +18,8 @@ import (
 	"testing"
 	"time"
 
+	selapi "github.com/SpareCores/sc-keeper-go/selection/api"
+
 	"github.com/aws/aws-sdk-go-v2/service/ec2"
 	ec2types "github.com/aws/aws-sdk-go-v2/service/ec2/types"
 	opstatus "github.com/awslabs/operatorpkg/status"
@@ -47,7 +49,6 @@ import (
 	"github.com/aws/karpenter-provider-aws/pkg/operator/options"
 	"github.com/aws/karpenter-provider-aws/pkg/test"
 
-	"github.com/SpareCores/sc-karpenter-nodepool/api/v1alpha1"
 	"github.com/SpareCores/sc-karpenter-nodepool/internal/nodepool"
 	"github.com/SpareCores/sc-karpenter-nodepool/internal/providers"
 	"github.com/SpareCores/sc-karpenter-nodepool/test/l4"
@@ -64,8 +65,8 @@ var (
 	dataTime      = time.Date(2026, 10, 5, 10, 2, 57, 0, time.UTC)
 
 	ec2NodeClassRef = nodepool.NodeClassRef{Group: "karpenter.k8s.aws", Kind: "EC2NodeClass", Name: nodeClassName}
-	amd64           = []v1alpha1.Architecture{v1alpha1.ArchitectureAMD64}
-	bothArchs       = []v1alpha1.Architecture{v1alpha1.ArchitectureAMD64, v1alpha1.ArchitectureARM64}
+	amd64           = []selapi.Architecture{selapi.ArchitectureAMD64}
+	bothArchs       = []selapi.Architecture{selapi.ArchitectureAMD64, selapi.ArchitectureARM64}
 )
 
 func TestMain(m *testing.M) {
@@ -445,7 +446,7 @@ func TestOfferingsWithinAdapterRules(t *testing.T) {
 		}
 		for _, it := range its {
 			for _, arch := range it.Requirements.Get(corev1.LabelArchStable).Values() {
-				if !slices.Contains(rules.AllowedArchitectures, v1alpha1.Architecture(arch)) {
+				if !slices.Contains(rules.AllowedArchitectures, selapi.Architecture(arch)) {
 					t.Errorf("%s: %s offers architecture %s outside the adapter's %v", id, it.Name, arch, rules.AllowedArchitectures)
 				}
 			}

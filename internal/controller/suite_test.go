@@ -31,11 +31,12 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	"github.com/SpareCores/sc-karpenter-nodepool/api/v1alpha1"
-	"github.com/SpareCores/sc-karpenter-nodepool/internal/keeper"
-	"github.com/SpareCores/sc-karpenter-nodepool/internal/keeper/keepertest"
 	"github.com/SpareCores/sc-karpenter-nodepool/internal/nodepool"
 	"github.com/SpareCores/sc-karpenter-nodepool/internal/providers"
+	"github.com/SpareCores/sc-karpenter-nodepool/internal/testsnapshot"
 	"github.com/SpareCores/sc-karpenter-nodepool/internal/testutil"
+	keeper "github.com/SpareCores/sc-keeper-go"
+	selapi "github.com/SpareCores/sc-keeper-go/selection/api"
 )
 
 // The envtest control plane has the SCNodePool CRD, Karpenter core's
@@ -77,7 +78,7 @@ func TestMain(m *testing.M) {
 			fmt.Fprintln(os.Stderr, err)
 			return 1
 		}
-		h, err := keepertest.NewHandler(keepertest.SnapshotDir())
+		h, err := testsnapshot.NewHandler(testsnapshot.Dir())
 		if err != nil {
 			fmt.Fprintln(os.Stderr, err)
 			return 1
@@ -161,10 +162,10 @@ func mustCreate(t *testing.T, obj client.Object) {
 
 // familiesSelector selects the 2..maxVCPUs sizes of c7a, m7a (amd64) and
 // c7g (arm64) from the AWS snapshot.
-func familiesSelector(minVCPUs, maxVCPUs int32) *v1alpha1.Selector {
-	return &v1alpha1.Selector{
-		VCPUs:    &v1alpha1.IntRange{Min: &minVCPUs, Max: &maxVCPUs},
-		Families: &v1alpha1.GlobFilter{Include: []string{"c7a", "m7a", "c7g"}},
+func familiesSelector(minVCPUs, maxVCPUs int32) *selapi.Selector {
+	return &selapi.Selector{
+		VCPUs:    &selapi.IntRange{Min: &minVCPUs, Max: &maxVCPUs},
+		Families: &selapi.GlobFilter{Include: []string{"c7a", "m7a", "c7g"}},
 	}
 }
 
@@ -173,7 +174,7 @@ func templateJSON(group, kind, name, extra string) []byte {
 	return []byte(s)
 }
 
-func newPool(name, nodeClass string, sel *v1alpha1.Selector) *v1alpha1.SCNodePool {
+func newPool(name, nodeClass string, sel *selapi.Selector) *v1alpha1.SCNodePool {
 	return &v1alpha1.SCNodePool{
 		ObjectMeta: metav1.ObjectMeta{Name: name},
 		Spec: v1alpha1.SCNodePoolSpec{

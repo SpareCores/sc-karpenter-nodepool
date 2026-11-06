@@ -13,13 +13,14 @@ import (
 	"fmt"
 	"os"
 
-	"github.com/SpareCores/sc-karpenter-nodepool/internal/keeper/keepertest"
+	"github.com/SpareCores/sc-karpenter-nodepool/internal/testsnapshot"
+
 	"github.com/SpareCores/sc-karpenter-nodepool/test/kwok/catalog"
 )
 
 func main() {
 	out := flag.String("out", "", "directory to write <vendor>.json files into")
-	snapshot := flag.String("snapshot", keepertest.SnapshotDir(), "snapshot directory")
+	snapshot := flag.String("snapshot", testsnapshot.Dir(), "snapshot directory")
 	providerKeys := flag.Bool("provider-keys", true, "put the provider's own label keys into the offerings")
 	flag.Parse()
 	if *out == "" {

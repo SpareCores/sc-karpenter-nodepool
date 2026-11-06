@@ -18,10 +18,12 @@ import (
 	"context"
 	"errors"
 
+	selapi "github.com/SpareCores/sc-keeper-go/selection/api"
+
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 
 	"github.com/SpareCores/sc-karpenter-nodepool/api/v1alpha1"
-	"github.com/SpareCores/sc-karpenter-nodepool/internal/selection"
+	"github.com/SpareCores/sc-keeper-go/selection"
 )
 
 // ID identifies a provider adapter (SCNodePool status.provider).
@@ -110,7 +112,7 @@ type Adapter interface {
 	ToKeeperRegion(k8sRegion string, regions *RegionIndex) (string, error)
 	// ArchitecturesFromNodeClass returns the architectures the NodeClass can
 	// launch, when it says so (hcloud: resolved images, §6.5).
-	ArchitecturesFromNodeClass(nodeClass *unstructured.Unstructured) ([]v1alpha1.Architecture, bool)
+	ArchitecturesFromNodeClass(nodeClass *unstructured.Unstructured) ([]selapi.Architecture, bool)
 
 	// RequirementRules are the provider's rules for the emitted requirements
 	// (§6.4, §6.5).

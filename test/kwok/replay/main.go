@@ -16,15 +16,15 @@ import (
 	"net/http"
 	"time"
 
-	"github.com/SpareCores/sc-karpenter-nodepool/internal/keeper/keepertest"
+	"github.com/SpareCores/sc-karpenter-nodepool/internal/testsnapshot"
 )
 
 func main() {
 	addr := flag.String("addr", ":8080", "listen address")
-	dir := flag.String("snapshot", keepertest.SnapshotDir(), "snapshot directory (test/data/sc-snapshot)")
+	dir := flag.String("snapshot", testsnapshot.Dir(), "snapshot directory (test/data/sc-snapshot)")
 	flag.Parse()
 
-	h, err := keepertest.NewHandler(*dir)
+	h, err := testsnapshot.NewHandler(*dir)
 	if err != nil {
 		log.Fatalf("replay: %v", err)
 	}

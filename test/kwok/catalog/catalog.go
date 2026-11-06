@@ -31,9 +31,9 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/SpareCores/sc-karpenter-nodepool/internal/keeper"
-	"github.com/SpareCores/sc-karpenter-nodepool/internal/keeper/keepertest"
 	"github.com/SpareCores/sc-karpenter-nodepool/internal/providers"
+	keeper "github.com/SpareCores/sc-keeper-go"
+	"github.com/SpareCores/sc-keeper-go/keepertest"
 )
 
 // MaxVCPUs bounds the size of the types in a catalog: bigger types only make

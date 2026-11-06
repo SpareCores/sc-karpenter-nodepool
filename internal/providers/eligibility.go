@@ -11,9 +11,10 @@ import (
 	"slices"
 	"strings"
 
-	"github.com/SpareCores/sc-karpenter-nodepool/api/v1alpha1"
-	"github.com/SpareCores/sc-karpenter-nodepool/internal/keeper"
-	"github.com/SpareCores/sc-karpenter-nodepool/internal/selection"
+	selapi "github.com/SpareCores/sc-keeper-go/selection/api"
+
+	keeper "github.com/SpareCores/sc-keeper-go"
+	"github.com/SpareCores/sc-keeper-go/selection"
 )
 
 // Spare Cores server status values (lower case, as Keeper returns them).
@@ -35,7 +36,7 @@ func commonEligibility(c *selection.Candidate, _ Env) string {
 	return ""
 }
 
-func onlyArchitectures(archs ...v1alpha1.Architecture) eligibilityRule {
+func onlyArchitectures(archs ...selapi.Architecture) eligibilityRule {
 	return func(c *selection.Candidate, _ Env) string {
 		if !slices.Contains(archs, c.Architecture) {
 			return fmt.Sprintf("architecture %s is not supported by the provider", c.Architecture)
@@ -89,7 +90,7 @@ func requireOnDemandPrice(c *selection.Candidate, _ Env) string {
 
 // excludeTPUs: TPUs are not schedulable as GCE instances by the GCP provider.
 func excludeTPUs(c *selection.Candidate, _ Env) string {
-	if c.AcceleratorType == v1alpha1.AcceleratorTypeTPU {
+	if c.AcceleratorType == selapi.AcceleratorTypeTPU {
 		return "TPU types are not supported by the provider"
 	}
 	return ""

@@ -14,6 +14,8 @@ import (
 	"testing"
 	"time"
 
+	selapi "github.com/SpareCores/sc-keeper-go/selection/api"
+
 	corev1 "k8s.io/api/core/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -426,7 +428,7 @@ func TestPreflightFailures(t *testing.T) {
 func TestUnknownBenchmarkConfig(t *testing.T) {
 	createNodeClass(t, "nc-bench", "use1-az1")
 	sel := familiesSelector(2, 4)
-	sel.Benchmarks = []v1alpha1.BenchmarkFilter{{BenchmarkRef: v1alpha1.BenchmarkRef{ID: "geekbench:score"}, Min: new(1.0)}}
+	sel.Benchmarks = []selapi.BenchmarkFilter{{BenchmarkRef: selapi.BenchmarkRef{ID: "geekbench:score"}, Min: new(1.0)}}
 	createPool(t, newPool("bench", "nc-bench", sel))
 	r, _ := newReconciler()
 	reconcileOnce(t, r, "bench")

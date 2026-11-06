@@ -27,6 +27,8 @@ import (
 	"sync"
 	"time"
 
+	selapi "github.com/SpareCores/sc-keeper-go/selection/api"
+
 	"github.com/go-logr/logr"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
@@ -151,7 +153,7 @@ type Scenario struct {
 	// InstanceTypes are the selected instance types.
 	InstanceTypes []string
 	// Architectures are the architectures of InstanceTypes.
-	Architectures []v1alpha1.Architecture
+	Architectures []selapi.Architecture
 }
 
 // templateSpec is spec.nodePoolTemplate.spec of the scenario.

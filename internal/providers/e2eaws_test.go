@@ -16,8 +16,8 @@ import (
 	"sigs.k8s.io/yaml"
 
 	"github.com/SpareCores/sc-karpenter-nodepool/api/v1alpha1"
-	"github.com/SpareCores/sc-karpenter-nodepool/internal/keeper"
-	"github.com/SpareCores/sc-karpenter-nodepool/internal/selection"
+	keeper "github.com/SpareCores/sc-keeper-go"
+	"github.com/SpareCores/sc-keeper-go/selection"
 )
 
 // TestE2EAWSSelection keeps the L5 lane's SCNodePool and its expected list
@@ -66,7 +66,7 @@ func TestE2EAWSSelection(t *testing.T) {
 		t.Run(string(tc.id), func(t *testing.T) {
 			a := mustAdapter(t, tc.id)
 			cands := snapshotCandidates(t, "aws", keeper.AllocationOnDemand)
-			res, err := selection.Evaluate(&pool.Spec, cands, selection.Options{
+			res, err := selection.Evaluate(pool.Spec.Selection(), cands, selection.Options{
 				Eligible:    EligibleFunc(a, tc.env),
 				ManagedFees: tc.env.ManagedFees,
 			})

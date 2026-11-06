@@ -26,10 +26,11 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	"github.com/SpareCores/sc-karpenter-nodepool/api/v1alpha1"
-	"github.com/SpareCores/sc-karpenter-nodepool/internal/keeper/keepertest"
 	"github.com/SpareCores/sc-karpenter-nodepool/internal/nodepool"
 	"github.com/SpareCores/sc-karpenter-nodepool/internal/providers"
+	"github.com/SpareCores/sc-karpenter-nodepool/internal/testsnapshot"
 	"github.com/SpareCores/sc-karpenter-nodepool/test/kwok/catalog"
+	selapi "github.com/SpareCores/sc-keeper-go/selection/api"
 )
 
 // loadReplicas is the number of pods (and therefore NodeClaims: they repel
@@ -53,7 +54,7 @@ func TestLane(t *testing.T) {
 			only[v] = true
 		}
 	}
-	snapshot := keepertest.SnapshotDir()
+	snapshot := testsnapshot.Dir()
 	// The same catalogs run.sh baked into the Karpenter image.
 	var opts []catalog.Option
 	if os.Getenv("KWOK_PROVIDER_KEYS") == "false" {
@@ -161,7 +162,7 @@ func useCatalog(t *testing.T, cat *catalog.Catalog) {
 
 // poolOptions vary the SCNodePool a scenario creates.
 type poolOptions struct {
-	selector *v1alpha1.Selector
+	selector *selapi.Selector
 	// requirements and labels go into the template.
 	requirements []map[string]any
 }
@@ -198,7 +199,7 @@ func (v vendorRun) newSCNodePool(t *testing.T, name string, o poolOptions) {
 		Spec: v1alpha1.SCNodePoolSpec{
 			NodePoolTemplate: v1alpha1.NodePoolTemplate{Spec: runtime.RawExtension{Raw: raw}},
 			Selector:         o.selector,
-			Churn:            v1alpha1.Churn{MaxRemovalsPerRefresh: new(int32(100000))},
+			Churn:            selapi.Churn{MaxRemovalsPerRefresh: new(int32(100000))},
 		},
 	}
 	if err := k8s.Create(ctx(), p); err != nil {
@@ -214,12 +215,12 @@ func (v vendorRun) newSCNodePool(t *testing.T, name string, o poolOptions) {
 
 // vcpuRange selects types by size; the catalogs hold types up to
 // catalog.MaxVCPUs.
-func vcpuRange(minV, maxV int32) *v1alpha1.Selector {
-	r := &v1alpha1.IntRange{Min: new(minV)}
+func vcpuRange(minV, maxV int32) *selapi.Selector {
+	r := &selapi.IntRange{Min: new(minV)}
 	if maxV > 0 {
 		r.Max = new(maxV)
 	}
-	return &v1alpha1.Selector{VCPUs: r}
+	return &selapi.Selector{VCPUs: r}
 }
 
 // waitSynced waits until the controller applied the NodePool of the current

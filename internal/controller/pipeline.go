@@ -15,6 +15,8 @@ import (
 	"strings"
 	"time"
 
+	selapi "github.com/SpareCores/sc-keeper-go/selection/api"
+
 	corev1 "k8s.io/api/core/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -23,11 +25,11 @@ import (
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 
 	"github.com/SpareCores/sc-karpenter-nodepool/api/v1alpha1"
-	"github.com/SpareCores/sc-karpenter-nodepool/internal/keeper"
 	"github.com/SpareCores/sc-karpenter-nodepool/internal/nodepool"
 	"github.com/SpareCores/sc-karpenter-nodepool/internal/providers"
-	"github.com/SpareCores/sc-karpenter-nodepool/internal/selection"
-	"github.com/SpareCores/sc-karpenter-nodepool/internal/selection/churn"
+	keeper "github.com/SpareCores/sc-keeper-go"
+	"github.com/SpareCores/sc-keeper-go/selection"
+	"github.com/SpareCores/sc-keeper-go/selection/churn"
 )
 
 const (
@@ -305,7 +307,7 @@ func (ru *run) evaluate(ctx context.Context) (*evaluation, *failure) {
 		if archs == nil {
 			archs = fromClass
 		} else {
-			archs = slices.DeleteFunc(slices.Clone(archs), func(x v1alpha1.Architecture) bool { return !slices.Contains(fromClass, x) })
+			archs = slices.DeleteFunc(slices.Clone(archs), func(x selapi.Architecture) bool { return !slices.Contains(fromClass, x) })
 		}
 	}
 	if archs != nil && len(archs) == 0 {
@@ -332,7 +334,7 @@ func (ru *run) evaluate(ctx context.Context) (*evaluation, *failure) {
 	if ru.tmpl.HasInstanceTypeConstraint() {
 		opts.InstanceTypeAllowed = ru.tmpl.InstanceTypeAllowed
 	}
-	queries, err := selection.PlanQueries(&ru.pool.Spec, a.Vendor(), ev.keeperRegions, opts)
+	queries, err := selection.PlanQueries(ru.pool.Spec.Selection(), a.Vendor(), ev.keeperRegions, opts)
 	if err != nil {
 		if errors.Is(err, keeper.ErrUnknownBenchmarkConfig) {
 			ru.set(v1alpha1.ConditionDataAvailable, metav1.ConditionFalse, v1alpha1.ReasonUnknownBenchmarkConfig, err.Error())
@@ -356,7 +358,7 @@ func (ru *run) evaluate(ctx context.Context) (*evaluation, *failure) {
 	for _, c := range cands {
 		ev.candidates[c.Name()] = c
 	}
-	if ev.result, err = selection.Evaluate(&ru.pool.Spec, cands, opts); err != nil {
+	if ev.result, err = selection.Evaluate(ru.pool.Spec.Selection(), cands, opts); err != nil {
 		return nil, fail(v1alpha1.ReasonInvalidSpec, false, "%v", err)
 	}
 	return ev, nil
@@ -483,8 +485,8 @@ func renderFailure(ru *run, err error) *failure {
 // by churn control that are no longer offered have no candidate; then the
 // architectures the NodePool emitted so far are kept as well, so their
 // running nodes do not drift.
-func (ru *run) architecturesOf(types []string, cands map[string]*selection.Candidate) []v1alpha1.Architecture {
-	var out []v1alpha1.Architecture
+func (ru *run) architecturesOf(types []string, cands map[string]*selection.Candidate) []selapi.Architecture {
+	var out []selapi.Architecture
 	unknown := false
 	for _, name := range types {
 		if c, ok := cands[name]; ok && c.Architecture != "" {
@@ -497,7 +499,7 @@ func (ru *run) architecturesOf(types []string, cands map[string]*selection.Candi
 		for _, r := range nodepool.RequirementsOf(ru.np) {
 			if r.Key == providers.LabelArch && r.Operator == nodepool.OpIn {
 				for _, v := range r.Values {
-					out = append(out, v1alpha1.Architecture(v))
+					out = append(out, selapi.Architecture(v))
 				}
 			}
 		}

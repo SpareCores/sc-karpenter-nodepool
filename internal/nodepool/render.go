@@ -15,6 +15,8 @@ import (
 	"strings"
 	"time"
 
+	selapi "github.com/SpareCores/sc-keeper-go/selection/api"
+
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/util/validation"
@@ -33,7 +35,7 @@ type Input struct {
 	InstanceTypes []string
 	// Architectures are the architectures of InstanceTypes, emitted when
 	// the template has no kubernetes.io/arch requirement.
-	Architectures []v1alpha1.Architecture
+	Architectures []selapi.Architecture
 	// Rules are the provider adapter's requirement rules.
 	Rules providers.RequirementRules
 	// ForcedZones are emitted as topology.kubernetes.io/zone when the rules

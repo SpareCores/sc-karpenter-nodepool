@@ -19,11 +19,22 @@ jobs:
     timeout-minutes: 30
     steps:
       - uses: actions/checkout@v6
+      - uses: actions/setup-go@v6
+        with:
+          go-version-file: go.mod
       - uses: actions/setup-python@v6
         with:
           python-version: "3.12"
-      - name: Fetch snapshot
-        run: python3 hack/sc-snapshot/fetch.py --out test/data/sc-snapshot
+      # The Keeper requests come from the shared fetcher of sc-keeper-go; the
+      # query list reproduces the committed snapshot (internal/testsnapshot).
+      - name: Fetch the Keeper responses
+        run: >-
+          go run github.com/SpareCores/sc-keeper-go/cmd/sc-snapshot
+          -queries hack/sc-snapshot/queries.yaml -out test/data/sc-snapshot
+      # What only this repository needs: the EKS Auto Mode fees of the AWS
+      # public price list.
+      - name: Add the EKS Auto Mode fees
+        run: python3 hack/sc-snapshot/eks-fees.py --out test/data/sc-snapshot
       - name: Commit if changed
         run: |
           git add -A test/data/sc-snapshot

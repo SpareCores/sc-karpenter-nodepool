@@ -11,6 +11,8 @@ import (
 	"slices"
 	"strings"
 
+	selapi "github.com/SpareCores/sc-keeper-go/selection/api"
+
 	"k8s.io/apimachinery/pkg/runtime"
 	utiljson "k8s.io/apimachinery/pkg/util/json"
 
@@ -198,21 +200,21 @@ func (t *Template) allowed(key string, universe []string) (values []string, rest
 
 // knownArchitectures is the universe a NotIn arch requirement subtracts
 // from.
-var knownArchitectures = []string{string(v1alpha1.ArchitectureAMD64), string(v1alpha1.ArchitectureARM64)}
+var knownArchitectures = []string{string(selapi.ArchitectureAMD64), string(selapi.ArchitectureARM64)}
 
 // knownCapacityTypes is the universe of karpenter.sh/capacity-type values.
 var knownCapacityTypes = []string{providers.CapacityTypeOnDemand, providers.CapacityTypeSpot, providers.CapacityTypeReserved}
 
 // Architectures returns the kubernetes.io/arch values the template allows
 // (nil: unrestricted).
-func (t *Template) Architectures() []v1alpha1.Architecture {
+func (t *Template) Architectures() []selapi.Architecture {
 	values, ok := t.allowed(providers.LabelArch, knownArchitectures)
 	if !ok {
 		return nil
 	}
-	out := make([]v1alpha1.Architecture, len(values))
+	out := make([]selapi.Architecture, len(values))
 	for i, v := range values {
-		out[i] = v1alpha1.Architecture(v)
+		out[i] = selapi.Architecture(v)
 	}
 	return out
 }
@@ -230,12 +232,12 @@ func (t *Template) CapacityTypes(universe []string) []string {
 
 // DefaultBasis is the price basis the template implies: Spot when it allows
 // spot but not on-demand capacity, else OnDemand (overview §3.4 step 4).
-func (t *Template) DefaultBasis() v1alpha1.PriceBasis {
+func (t *Template) DefaultBasis() selapi.PriceBasis {
 	ct := t.CapacityTypes(knownCapacityTypes)
 	if ct != nil && slices.Contains(ct, providers.CapacityTypeSpot) && !slices.Contains(ct, providers.CapacityTypeOnDemand) {
-		return v1alpha1.PriceBasisSpot
+		return selapi.PriceBasisSpot
 	}
-	return v1alpha1.PriceBasisOnDemand
+	return selapi.PriceBasisOnDemand
 }
 
 // HasInstanceTypeConstraint reports whether the template restricts

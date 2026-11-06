@@ -11,14 +11,14 @@ import (
 	"slices"
 	"testing"
 
-	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
+	selapi "github.com/SpareCores/sc-keeper-go/selection/api"
 
-	"github.com/SpareCores/sc-karpenter-nodepool/api/v1alpha1"
+	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 )
 
 var (
-	amd64 = v1alpha1.ArchitectureAMD64
-	arm64 = v1alpha1.ArchitectureARM64
+	amd64 = selapi.ArchitectureAMD64
+	arm64 = selapi.ArchitectureARM64
 )
 
 // TestRequirementRules is the §6.4/§6.5 table.
@@ -27,7 +27,7 @@ func TestRequirementRules(t *testing.T) {
 		id               ID
 		allowed          []string
 		single           bool
-		archs            []v1alpha1.Architecture
+		archs            []selapi.Architecture
 		singleArch       bool
 		forceZones       bool
 		warnZone         bool
@@ -110,29 +110,29 @@ func TestRulesAreCopies(t *testing.T) {
 }
 
 func TestResolveArchitectures(t *testing.T) {
-	both := []v1alpha1.Architecture{arm64, amd64, arm64}
+	both := []selapi.Architecture{arm64, amd64, arm64}
 	cases := []struct {
 		id          ID
-		template    []v1alpha1.Architecture
-		selected    []v1alpha1.Architecture
-		want        []v1alpha1.Architecture
+		template    []selapi.Architecture
+		selected    []selapi.Architecture
+		want        []selapi.Architecture
 		emit        bool
 		unsupported bool
 	}{
 		{id: AWS, selected: both, want: bothArchs, emit: true},
-		{id: AWS, template: []v1alpha1.Architecture{arm64}, selected: both, want: []v1alpha1.Architecture{arm64}, emit: true},
+		{id: AWS, template: []selapi.Architecture{arm64}, selected: both, want: []selapi.Architecture{arm64}, emit: true},
 		{id: AWS, selected: nil, want: nil, emit: false},
 		// EKS Auto Mode stamps kubernetes.io/arch like AWS; only
 		// kubernetes.io/os is never emitted.
 		{id: AWSAutoMode, selected: both, want: bothArchs, emit: true},
-		{id: AWSAutoMode, template: []v1alpha1.Architecture{amd64}, selected: both, want: []v1alpha1.Architecture{amd64}, emit: true},
-		{id: AlicloudCloudpilot, selected: []v1alpha1.Architecture{arm64}, want: []v1alpha1.Architecture{arm64}, emit: true},
+		{id: AWSAutoMode, template: []selapi.Architecture{amd64}, selected: both, want: []selapi.Architecture{amd64}, emit: true},
+		{id: AlicloudCloudpilot, selected: []selapi.Architecture{arm64}, want: []selapi.Architecture{arm64}, emit: true},
 		{id: AlicloudCloudpilot, selected: both, unsupported: true},
-		{id: AlicloudCloudpilot, template: []v1alpha1.Architecture{amd64, arm64}, unsupported: true},
-		{id: AlicloudCloudpilot, template: []v1alpha1.Architecture{amd64}, selected: both, want: []v1alpha1.Architecture{amd64}, emit: true},
+		{id: AlicloudCloudpilot, template: []selapi.Architecture{amd64, arm64}, unsupported: true},
+		{id: AlicloudCloudpilot, template: []selapi.Architecture{amd64}, selected: both, want: []selapi.Architecture{amd64}, emit: true},
 		{id: AlicloudACK, selected: both, want: bothArchs, emit: true},
-		{id: HcloudItsh, template: []v1alpha1.Architecture{arm64}, unsupported: true},
-		{id: Vultr, selected: []v1alpha1.Architecture{amd64}, want: amd64Only, emit: true},
+		{id: HcloudItsh, template: []selapi.Architecture{arm64}, unsupported: true},
+		{id: Vultr, selected: []selapi.Architecture{amd64}, want: amd64Only, emit: true},
 	}
 	for i, c := range cases {
 		got, emit, err := mustAdapter(t, c.id).RequirementRules().ResolveArchitectures(c.template, c.selected)
@@ -181,11 +181,11 @@ func TestArchitecturesFromNodeClass(t *testing.T) {
 	hcloud := mustAdapter(t, Hcloud)
 	cases := []struct {
 		nc   *unstructured.Unstructured
-		want []v1alpha1.Architecture
+		want []selapi.Architecture
 		ok   bool
 	}{
-		{nc("x86", "arm"), bothArchs, true},                 // stubbi spelling
-		{nc("arm64"), []v1alpha1.Architecture{arm64}, true}, // echohello spelling
+		{nc("x86", "arm"), bothArchs, true},               // stubbi spelling
+		{nc("arm64"), []selapi.Architecture{arm64}, true}, // echohello spelling
 		{nc("amd64", "x86"), amd64Only, true},
 		{nc("riscv"), nil, false},
 		{nc(), nil, false},

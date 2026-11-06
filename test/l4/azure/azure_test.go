@@ -20,6 +20,8 @@ import (
 	"testing"
 	"time"
 
+	selapi "github.com/SpareCores/sc-keeper-go/selection/api"
+
 	"github.com/samber/lo"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -47,12 +49,11 @@ import (
 	"github.com/Azure/karpenter-provider-azure/pkg/operator/options"
 	"github.com/Azure/karpenter-provider-azure/pkg/test"
 
-	"github.com/SpareCores/sc-karpenter-nodepool/api/v1alpha1"
-	"github.com/SpareCores/sc-karpenter-nodepool/internal/keeper"
 	"github.com/SpareCores/sc-karpenter-nodepool/internal/nodepool"
 	"github.com/SpareCores/sc-karpenter-nodepool/internal/providers"
-	"github.com/SpareCores/sc-karpenter-nodepool/internal/selection"
 	"github.com/SpareCores/sc-karpenter-nodepool/test/l4"
+	keeper "github.com/SpareCores/sc-keeper-go"
+	"github.com/SpareCores/sc-keeper-go/selection"
 )
 
 const nodeClassName = "sc-l4"
@@ -69,8 +70,8 @@ var (
 	dataTime      = time.Date(2026, 10, 5, 10, 2, 57, 0, time.UTC)
 
 	aksNodeClassRef = nodepool.NodeClassRef{Group: "karpenter.azure.com", Kind: "AKSNodeClass", Name: nodeClassName}
-	amd64           = []v1alpha1.Architecture{v1alpha1.ArchitectureAMD64}
-	bothArchs       = []v1alpha1.Architecture{v1alpha1.ArchitectureAMD64, v1alpha1.ArchitectureARM64}
+	amd64           = []selapi.Architecture{selapi.ArchitectureAMD64}
+	bothArchs       = []selapi.Architecture{selapi.ArchitectureAMD64, selapi.ArchitectureARM64}
 
 	zone1, zone2 = fake.Region + "-1", fake.Region + "-2"
 )
@@ -369,7 +370,7 @@ func TestOfferingsWithinAdapterRules(t *testing.T) {
 	rules := a.RequirementRules()
 	for _, it := range providerInstanceTypes(t) {
 		for _, arch := range it.Requirements.Get(corev1.LabelArchStable).Values() {
-			if !slices.Contains(rules.AllowedArchitectures, v1alpha1.Architecture(arch)) {
+			if !slices.Contains(rules.AllowedArchitectures, selapi.Architecture(arch)) {
 				t.Errorf("%s offers architecture %s outside the adapter's %v", it.Name, arch, rules.AllowedArchitectures)
 			}
 		}
@@ -422,9 +423,9 @@ func TestEligibilityMatchesProvider(t *testing.T) {
 			APIReference: name, VCPUs: int(vcpus), MemoryAmount: memGiB * 1024,
 			AcceleratorCount: float64(gpus), Status: "active", CPUArchitecture: "x86_64",
 		}
-		c := &selection.Candidate{Server: srv, Architecture: v1alpha1.ArchitectureAMD64}
+		c := &selection.Candidate{Server: srv, Architecture: selapi.ArchitectureAMD64}
 		if strings.EqualFold(arch, "Arm64") {
-			c.Server.CPUArchitecture, c.Architecture = "arm64", v1alpha1.ArchitectureARM64
+			c.Server.CPUArchitecture, c.Architecture = "arm64", selapi.ArchitectureARM64
 		}
 		if d, err := sku.GetRetirementDate(); err == nil && d != nil && d.Before(sixMonths) {
 			c.Server.Status = "planned-for-retirement"

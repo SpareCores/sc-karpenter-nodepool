@@ -12,7 +12,8 @@ import (
 	"slices"
 	"testing"
 
-	"github.com/SpareCores/sc-karpenter-nodepool/internal/keeper/keepertest"
+	"github.com/SpareCores/sc-karpenter-nodepool/internal/testsnapshot"
+
 	"github.com/SpareCores/sc-karpenter-nodepool/internal/providers"
 )
 
@@ -71,7 +72,7 @@ func TestGenerate(t *testing.T) {
 			if !ok || a.Vendor() != v.Name {
 				t.Fatalf("adapter %s does not belong to vendor %s", v.Adapter, v.Name)
 			}
-			c, err := Generate(keepertest.SnapshotDir(), v)
+			c, err := Generate(testsnapshot.Dir(), v)
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -106,7 +107,7 @@ func TestGenerate(t *testing.T) {
 func TestWithoutProviderKeys(t *testing.T) {
 	wellKnown := []string{labelZone, labelRegion, labelCapacityType}
 	for _, v := range Vendors() {
-		c, err := Generate(keepertest.SnapshotDir(), v, WithoutProviderKeys())
+		c, err := Generate(testsnapshot.Dir(), v, WithoutProviderKeys())
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -130,7 +131,7 @@ func TestTypesAboveTheCatalogExist(t *testing.T) {
 		var servers []struct {
 			VCPUs int `json:"vcpus"`
 		}
-		if err := readGzipJSON(keepertest.SnapshotDir()+"/"+v.Name+"/servers-ondemand.json.gz", &servers); err != nil {
+		if err := readGzipJSON(testsnapshot.Dir()+"/"+v.Name+"/servers-ondemand.json.gz", &servers); err != nil {
 			t.Fatal(err)
 		}
 		if !slices.ContainsFunc(servers, func(s struct {

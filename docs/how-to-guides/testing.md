@@ -16,9 +16,18 @@ and the Docker socket (kind needs it):
 
 ```bash
 hack/dev.sh make test
-hack/dev.sh go test ./internal/selection/...
+hack/dev.sh go test ./internal/providers/...
 hack/dev.sh bash                      # a shell in the container
 ```
+
+The Keeper client and the selection engine live in
+[sc-keeper-go](https://github.com/SpareCores/sc-keeper-go), a normal module
+dependency in `go.mod`. To develop both together, clone it next to this
+repository and add a temporary `replace github.com/SpareCores/sc-keeper-go =>
+../sc-keeper-go` to `go.mod` (and to `test/l4/go.mod` as `../../../sc-keeper-go`
+for L4): `hack/dev.sh` mounts the sibling read-only at the matching path in the
+container (`/sc-keeper-go`, since the repository is `/src`) when the directory
+exists. Never commit the replace directive.
 
 Never install the tools on the host; versions are bumped in the Dockerfile only.
 Settings of the lanes pass through from your environment when set:
@@ -51,11 +60,11 @@ diff before you keep it).
 
 | Layer | Command | Runs | What it proves |
 |---|---|---|---|
-| L1 unit and envtest | `make test` | every PR | Selection, ranking, churn, requirement building, adapters and the reconciler, against the committed Spare Cores snapshot replayed through a fake Keeper. |
+| L1 unit and envtest | `make test` | every PR | Requirement building, adapters and the reconciler, against the committed Spare Cores snapshot replayed through a fake Keeper (`internal/testsnapshot`). The Keeper client, selection, ranking and churn have their own tests in [sc-keeper-go](https://github.com/SpareCores/sc-keeper-go). |
 | L2 CRD matrix | `make test-crd` | every PR | Server-side dry-run of the generated NodePools (and negative cases) against the NodePool CRD each supported provider ships, one kind cluster, under a minute plus downloads. Logs in `test/crd/.out/`. |
 | L3 KWOK | `make test-kwok` | every PR, once per core version | Real scheduling, provisioning, drift and the drift-loop detector with core Karpenter's KWOK provider and per-vendor catalogs built from the snapshot, in kind. About 10 minutes per core version. Logs and catalogs in `test/kwok/.out/<version>/`. |
 | L4 provider tests | `make test-l4` | nightly (GitHub workflow), and on demand | The real AWS and Azure provider code launches only from our instance-type lists and stamps every requirement key we emit on its NodeClaims (no drift loop). In-process, with the providers' in-memory cloud fakes and envtest, under a minute plus module downloads. Log in `test/l4/.out/`. See [L4 in detail](#l4-in-detail). |
-| Live Keeper contract | `make test-live-keeper` | on demand (before a release, after Keeper changes) | Every selector field, with ordinary and edge values the CRD admits, on every vendor of the snapshot, against the live Keeper API: Keeper accepts every query the controller plans (no 422 for wrong types or out-of-range values), and the push-down filters never change the selection compared with the same queries without them (no unit mismatch). About a minute; needs network access. |
+| Live Keeper contract | `make test-live-keeper` in [sc-keeper-go](https://github.com/SpareCores/sc-keeper-go) | on demand (before a release, after Keeper changes) | Every selector field, with ordinary and edge values the CRD admits, on every vendor of the snapshot, against the live Keeper API: Keeper accepts every query the controller plans (no 422 for wrong types or out-of-range values), and the push-down filters never change the selection compared with the same queries without them (no unit mismatch). About a minute; needs network access. |
 | L5 real AWS | manual (GitHub workflow) | | The controller on EKS Auto Mode and on EKS with self-managed Karpenter in a real account: selection, provisioning and drift. About an hour and $0.6-0.8 per run. See [L5 in detail](#l5-in-detail). |
 
 ### L3 in detail
@@ -180,10 +189,20 @@ All lanes read `test/data/sc-snapshot/`, a fixed set of raw Keeper responses
 only on purpose:
 
 - on GitHub: run the workflow **Refresh Spare Cores snapshot** (Actions, manual
-  trigger). It runs `hack/sc-snapshot/fetch.py`, replaces the directory, and
-  commits it to the branch it ran on if any data changed;
-- locally: `hack/dev.sh python3 hack/sc-snapshot/fetch.py --out test/data/sc-snapshot`
-  (needs network access to Keeper and the AWS price list).
+  trigger). It fetches the requests of `hack/sc-snapshot/queries.yaml` with the
+  shared fetcher of sc-keeper-go (`cmd/sc-snapshot`), adds the EKS Auto Mode
+  fees with `hack/sc-snapshot/eks-fees.py`, replaces the directory, and commits
+  it to the branch it ran on if any data changed;
+- locally, the same two steps:
+  `hack/dev.sh go run github.com/SpareCores/sc-keeper-go/cmd/sc-snapshot -queries hack/sc-snapshot/queries.yaml -out test/data/sc-snapshot`
+  and `hack/dev.sh python3 hack/sc-snapshot/eks-fees.py --out test/data/sc-snapshot`
+  (they need network access to Keeper and to the AWS price list).
+
+The query list is the single description of what the snapshot holds (one test
+region per vendor, the tables, the `/servers` listings and the benchmark
+listings); `internal/testsnapshot` checks that it reproduces the committed
+manifest, so a change to the list or to the fetcher cannot silently change the
+snapshot.
 
 After a refresh, run the gates again: golden files and the numbers in the docs
 (the recipes in [write an SCNodePool](write-an-scnodepool.md), the

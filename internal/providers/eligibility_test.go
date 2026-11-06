@@ -12,9 +12,11 @@ import (
 	"strings"
 	"testing"
 
+	selapi "github.com/SpareCores/sc-keeper-go/selection/api"
+
 	"github.com/SpareCores/sc-karpenter-nodepool/api/v1alpha1"
-	"github.com/SpareCores/sc-karpenter-nodepool/internal/keeper"
-	"github.com/SpareCores/sc-karpenter-nodepool/internal/selection"
+	keeper "github.com/SpareCores/sc-keeper-go"
+	"github.com/SpareCores/sc-keeper-go/selection"
 )
 
 // split runs an adapter's filter over candidates.
@@ -93,7 +95,7 @@ func TestEligibilitySnapshot(t *testing.T) {
 			id: GCP, minKept: 400, maxKept: 600,
 			check: func(t *testing.T, kept []*selection.Candidate, _ map[string]string) {
 				for _, c := range kept {
-					if c.AcceleratorType == v1alpha1.AcceleratorTypeTPU {
+					if c.AcceleratorType == selapi.AcceleratorTypeTPU {
 						t.Errorf("gcp kept TPU type %s", c.Name())
 					}
 				}
@@ -223,7 +225,7 @@ func TestEligibilityOVHGPUs(t *testing.T) {
 	cands := snapshotCandidates(t, "ovh", keeper.AllocationOnDemand)
 	var gpus int
 	for _, c := range cands {
-		if c.Server.AcceleratorCount > 0 && c.Architecture == v1alpha1.ArchitectureAMD64 && !strings.HasPrefix(c.Name(), "bm-") {
+		if c.Server.AcceleratorCount > 0 && c.Architecture == selapi.ArchitectureAMD64 && !strings.HasPrefix(c.Name(), "bm-") {
 			gpus++
 		}
 	}
@@ -255,7 +257,7 @@ func TestEligibilityRules(t *testing.T) {
 	retiring := func(c *selection.Candidate) { c.Server.Status = "planned-for-retirement" }
 	tpu := func(c *selection.Candidate) {
 		c.Server.AcceleratorCount = 4
-		c.AcceleratorType = v1alpha1.AcceleratorTypeTPU
+		c.AcceleratorType = selapi.AcceleratorTypeTPU
 	}
 	noPrice := func(c *selection.Candidate) { c.Prices = map[keeper.Allocation]float64{} }
 	spotOnlyWithMin := func(c *selection.Candidate) {
@@ -331,8 +333,7 @@ func TestEligibleFuncAndEvaluate(t *testing.T) {
 	a := mustAdapter(t, AWSAutoMode)
 	fees := fixtureFees(t)
 	cands := snapshotCandidates(t, "aws", keeper.AllocationOnDemand)
-	spec := &v1alpha1.SCNodePoolSpec{}
-	res, err := selection.Evaluate(spec, cands, selection.Options{
+	res, err := selection.Evaluate(&selapi.Spec{}, cands, selection.Options{
 		Eligible:    EligibleFunc(a, Env{ManagedFees: fees}),
 		ManagedFees: fees,
 	})
@@ -357,23 +358,23 @@ func TestEligibleFuncAndEvaluate(t *testing.T) {
 func TestSelectsAccelerators(t *testing.T) {
 	f := func(v float64) *float64 { return &v }
 	cases := []struct {
-		sel  *v1alpha1.AcceleratorSelector
+		sel  *selapi.AcceleratorSelector
 		want bool
 	}{
 		{nil, false},
-		{&v1alpha1.AcceleratorSelector{}, false},
-		{&v1alpha1.AcceleratorSelector{Count: &v1alpha1.FloatRange{Min: f(1)}}, true},
-		{&v1alpha1.AcceleratorSelector{Count: &v1alpha1.FloatRange{Min: f(0)}}, false},
-		{&v1alpha1.AcceleratorSelector{Count: &v1alpha1.FloatRange{Max: f(0)}}, false},
-		{&v1alpha1.AcceleratorSelector{Types: []v1alpha1.AcceleratorType{v1alpha1.AcceleratorTypeGPU}}, true},
-		{&v1alpha1.AcceleratorSelector{Manufacturers: []string{"NVIDIA"}}, true},
-		{&v1alpha1.AcceleratorSelector{Models: []string{"L4"}}, true},
-		{&v1alpha1.AcceleratorSelector{MemoryPerDevice: &v1alpha1.GiBMin{MinGiB: f(16)}}, true},
-		{&v1alpha1.AcceleratorSelector{MemoryTotal: &v1alpha1.GiBMin{MinGiB: f(16)}}, true},
-		{&v1alpha1.AcceleratorSelector{Count: &v1alpha1.FloatRange{Max: f(0)}, Models: []string{"L4"}}, false},
+		{&selapi.AcceleratorSelector{}, false},
+		{&selapi.AcceleratorSelector{Count: &selapi.FloatRange{Min: f(1)}}, true},
+		{&selapi.AcceleratorSelector{Count: &selapi.FloatRange{Min: f(0)}}, false},
+		{&selapi.AcceleratorSelector{Count: &selapi.FloatRange{Max: f(0)}}, false},
+		{&selapi.AcceleratorSelector{Types: []selapi.AcceleratorType{selapi.AcceleratorTypeGPU}}, true},
+		{&selapi.AcceleratorSelector{Manufacturers: []string{"NVIDIA"}}, true},
+		{&selapi.AcceleratorSelector{Models: []string{"L4"}}, true},
+		{&selapi.AcceleratorSelector{MemoryPerDevice: &selapi.GiBMin{MinGiB: f(16)}}, true},
+		{&selapi.AcceleratorSelector{MemoryTotal: &selapi.GiBMin{MinGiB: f(16)}}, true},
+		{&selapi.AcceleratorSelector{Count: &selapi.FloatRange{Max: f(0)}, Models: []string{"L4"}}, false},
 	}
 	for i, c := range cases {
-		spec := &v1alpha1.SCNodePoolSpec{Selector: &v1alpha1.Selector{Accelerator: c.sel}}
+		spec := &v1alpha1.SCNodePoolSpec{Selector: &selapi.Selector{Accelerator: c.sel}}
 		if got := SelectsAccelerators(spec); got != c.want {
 			t.Errorf("case %d: got %v", i, got)
 		}

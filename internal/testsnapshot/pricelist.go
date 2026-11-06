@@ -4,7 +4,7 @@ License, v. 2.0. If a copy of the MPL was not distributed with this
 file, You can obtain one at https://mozilla.org/MPL/2.0/.
 */
 
-package keepertest
+package testsnapshot
 
 import (
 	"bytes"
@@ -20,7 +20,30 @@ import (
 	"slices"
 	"strconv"
 	"strings"
+
+	"github.com/SpareCores/sc-keeper-go/keepertest"
 )
+
+// Manifest is the manifest of the snapshot: the Keeper part (read by
+// keepertest) and the EKS Auto Mode fee table this repository adds to it.
+type Manifest struct {
+	keepertest.Manifest
+	// EKSAutoModeFees is absent in snapshots fetched without the fee step.
+	EKSAutoModeFees *FeeFile `json:"eks_automode_fees,omitempty"`
+}
+
+// LoadManifest reads manifest.json of a snapshot directory.
+func LoadManifest(dir string) (*Manifest, error) {
+	raw, err := os.ReadFile(filepath.Join(dir, "manifest.json"))
+	if err != nil {
+		return nil, fmt.Errorf("testsnapshot: %w", err)
+	}
+	var m Manifest
+	if err := json.Unmarshal(raw, &m); err != nil {
+		return nil, fmt.Errorf("testsnapshot: parsing manifest: %w", err)
+	}
+	return &m, nil
+}
 
 // FeeFile is the manifest entry of the EKS Auto Mode fee table the snapshot
 // fetcher extracts from the AWS public price list ({instance type: hourly
@@ -47,20 +70,20 @@ const (
 func ReadFeeTable(path string) (map[string]float64, error) {
 	raw, err := os.ReadFile(path)
 	if err != nil {
-		return nil, fmt.Errorf("keepertest: %w", err)
+		return nil, fmt.Errorf("testsnapshot: %w", err)
 	}
 	if strings.HasSuffix(path, ".gz") {
 		zr, err := gzip.NewReader(bytes.NewReader(raw))
 		if err != nil {
-			return nil, fmt.Errorf("keepertest: %s: %w", path, err)
+			return nil, fmt.Errorf("testsnapshot: %s: %w", path, err)
 		}
 		if raw, err = io.ReadAll(zr); err != nil {
-			return nil, fmt.Errorf("keepertest: %s: %w", path, err)
+			return nil, fmt.Errorf("testsnapshot: %s: %w", path, err)
 		}
 	}
 	var fees map[string]float64
 	if err := json.Unmarshal(raw, &fees); err != nil {
-		return nil, fmt.Errorf("keepertest: %s: %w", path, err)
+		return nil, fmt.Errorf("testsnapshot: %s: %w", path, err)
 	}
 	return fees, nil
 }
@@ -99,7 +122,7 @@ func (h *PriceListHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	}
 	fees, known := h.fees[region]
 	if r.Method != http.MethodGet || !ok || !known {
-		http.Error(w, fmt.Sprintf("keepertest: no price list for %s %s", r.Method, r.URL.Path), http.StatusNotFound)
+		http.Error(w, fmt.Sprintf("testsnapshot: no price list for %s %s", r.Method, r.URL.Path), http.StatusNotFound)
 		return
 	}
 	w.Header().Set("Content-Type", "application/json")
@@ -142,7 +165,7 @@ func OfferFile(region string, fees map[string]float64) map[string]any {
 
 // NewPriceList starts a price list server of the given fee tables; it is
 // closed when the test ends.
-func NewPriceList(t TB, fees map[string]map[string]float64) *httptest.Server {
+func NewPriceList(t keepertest.TB, fees map[string]map[string]float64) *httptest.Server {
 	t.Helper()
 	s := httptest.NewServer(NewPriceListHandler(fees))
 	t.Cleanup(s.Close)

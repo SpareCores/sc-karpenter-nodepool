@@ -20,7 +20,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/SpareCores/sc-karpenter-nodepool/internal/keeper/keepertest"
+	"github.com/SpareCores/sc-karpenter-nodepool/internal/testsnapshot"
 )
 
 func offerJSON(t *testing.T, v any) []byte {
@@ -34,7 +34,7 @@ func offerJSON(t *testing.T, v any) []byte {
 
 func TestParseAutoModeFees(t *testing.T) {
 	fees := fixtureFees(t)
-	got, err := ParseAutoModeFees(bytes.NewReader(offerJSON(t, keepertest.OfferFile("us-east-1", fees))))
+	got, err := ParseAutoModeFees(bytes.NewReader(offerJSON(t, testsnapshot.OfferFile("us-east-1", fees))))
 	if err != nil || !maps.Equal(got, fees) {
 		t.Fatalf("round trip: %v %v", got, err)
 	}
@@ -75,7 +75,7 @@ func TestParseAutoModeFees(t *testing.T) {
 
 func TestPriceListClient(t *testing.T) {
 	fees := fixtureFees(t)
-	srv := keepertest.NewPriceList(t, map[string]map[string]float64{"us-east-1": fees, "eu-west-9": {}})
+	srv := testsnapshot.NewPriceList(t, map[string]map[string]float64{"us-east-1": fees, "eu-west-9": {}})
 	c := NewPriceListClient(srv.URL, WithPriceListRetries(3, time.Millisecond))
 	ctx := context.Background()
 	got, err := c.AutoModeFees(ctx, "us-east-1")
@@ -98,7 +98,7 @@ func TestPriceListClient(t *testing.T) {
 
 func TestPriceListClientRetries(t *testing.T) {
 	var calls atomic.Int32
-	offer := offerJSON(t, keepertest.OfferFile("us-east-1", map[string]float64{"m5.large": 0.01}))
+	offer := offerJSON(t, testsnapshot.OfferFile("us-east-1", map[string]float64{"m5.large": 0.01}))
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		switch calls.Add(1) {
 		case 1:
@@ -196,7 +196,7 @@ func TestFeeCache(t *testing.T) {
 
 func TestAdapterManagedFees(t *testing.T) {
 	fees := fixtureFees(t)
-	srv := keepertest.NewPriceList(t, map[string]map[string]float64{"us-east-1": fees})
+	srv := testsnapshot.NewPriceList(t, map[string]map[string]float64{"us-east-1": fees})
 	src := NewFeeCache(NewPriceListClient(srv.URL))
 	ctx := context.Background()
 	got, err := mustAdapter(t, AWSAutoMode).ManagedFees(ctx, src, "us-east-1")

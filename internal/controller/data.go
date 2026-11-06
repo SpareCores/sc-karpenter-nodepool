@@ -10,8 +10,8 @@ import (
 	"sync"
 	"time"
 
-	"github.com/SpareCores/sc-karpenter-nodepool/internal/keeper"
 	"github.com/SpareCores/sc-karpenter-nodepool/internal/providers"
+	keeper "github.com/SpareCores/sc-keeper-go"
 )
 
 // DefaultDataTTL is how long Keeper responses and Auto Mode fees are shared
