@@ -25,3 +25,9 @@ test/e2e-aws/.cache/
 
 # lane outputs (logs, generated catalogs)
 .out/
+
+# sc-snapshot: lock and staging directory next to the snapshot output
+test/data/sc-snapshot.lock
+test/data/sc-snapshot.tmp/
+test/data/sc-snapshot.old/
+*.lock

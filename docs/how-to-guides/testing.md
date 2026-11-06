@@ -196,7 +196,12 @@ only on purpose:
 - locally, the same two steps:
   `hack/dev.sh go run github.com/SpareCores/sc-keeper-go/cmd/sc-snapshot -queries hack/sc-snapshot/queries.yaml -out test/data/sc-snapshot`
   and `hack/dev.sh python3 hack/sc-snapshot/eks-fees.py --out test/data/sc-snapshot`
-  (they need network access to Keeper and to the AWS price list).
+  (they need network access to Keeper and to the AWS price list). If the
+  fetch is interrupted, run it again with `-resume`: queries already written
+  (complete, same Keeper database hash) are skipped. The query list is
+  validated before the first fetch, so a retired or unknown region fails at
+  once, and the output is replaced only when the whole fetch succeeded (so run
+  `eks-fees.py` after it, as above).
 
 The query list is the single description of what the snapshot holds (one test
 region per vendor, the tables, the `/servers` listings and the benchmark

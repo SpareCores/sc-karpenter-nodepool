@@ -3,7 +3,7 @@ module github.com/SpareCores/sc-karpenter-nodepool
 go 1.26.6
 
 require (
-	github.com/SpareCores/sc-keeper-go v0.1.0
+	github.com/SpareCores/sc-keeper-go v0.1.2
 	github.com/prometheus/client_golang v1.24.0
 	k8s.io/api v0.37.0
 	k8s.io/apiextensions-apiserver v0.37.0

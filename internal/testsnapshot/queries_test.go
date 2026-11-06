@@ -28,6 +28,7 @@ func TestQueryListReproducesTheCommittedManifest(t *testing.T) {
 	}
 	srv := New(t)
 	snap, err := snapshot.Fetch(context.Background(), list, snapshot.Options{
+		Dir:       filepath.Join(t.TempDir(), "snapshot"),
 		KeeperURL: srv.URL,
 		Sleep:     func(context.Context, time.Duration) error { return nil },
 	})
