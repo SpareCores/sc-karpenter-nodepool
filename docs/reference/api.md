@@ -154,7 +154,7 @@ Semantics: [selectors reference](selectors.md).
 | `architectures` | array of string |  | architectures restricts the CPU architecture; intersected with a kubernetes.io/arch requirement of the template. One of `amd64`, `arm64`. At most 2 items. |
 | `benchmarks` | array of [object](#specselectorbenchmarks) |  | benchmarks are filters on benchmark scores; entries are AND-ed. At most 32 items. |
 | `cpu` | [object](#specselectorcpu) |  | CPUSelector selects on CPU facts. |
-| `families` | [object](#specselectorfamilies) |  | families include/exclude globs on the Spare Cores family string. |
+| `families` | [object](#specselectorfamilies) |  | families include/exclude globs on the instance family: the Spare Cores series (e.g. m7i) when set, otherwise the family (e.g. General Purpose). |
 | `instanceTypes` | [object](#specselectorinstancetypes) |  | instanceTypes include/exclude globs on the instance type name (server.api_reference). |
 | `memory` | [object](#specselectormemory) |  | MemorySelector selects on memory size, in GiB. |
 | `network` | [object](#specselectornetwork) |  | NetworkSelector selects on network bandwidth. Setting a field excludes every type without a value. |
@@ -273,7 +273,7 @@ Semantics: [selectors reference](selectors.md).
 
 ### `spec.selector.families`
 
-families include/exclude globs on the Spare Cores family string.
+families include/exclude globs on the instance family: the Spare Cores series (e.g. m7i) when set, otherwise the family (e.g. General Purpose).
 
 Semantics: [selectors reference](selectors.md).
 
