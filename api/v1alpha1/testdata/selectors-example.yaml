@@ -14,7 +14,7 @@ spec:
         consolidateAfter: 1m
   selector:
     instanceTypes: {include: ["*"], exclude: ["*.metal*"]}   # globs on api_reference
-    families: {include: [], exclude: ["t*"]}                 # globs on SC family
+    families: {include: [], exclude: ["t*"]}                 # globs on SC series (else family)
     vcpus: {min: 2, max: 16}
     architectures: [amd64, arm64]
     cpu:

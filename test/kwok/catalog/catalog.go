@@ -119,7 +119,7 @@ func Vendors() []Vendor {
 			Zone: func(z keeper.Zone, _ keeper.Region) (string, bool) { return z.ZoneID, true },
 			Keys: func(s keeper.Server, _ keeper.Zone) map[string]string {
 				return map[string]string{
-					"karpenter.alibabacloud.com/instance-family": s.Family,
+					"karpenter.alibabacloud.com/instance-family": seriesOrFamily(s),
 					"karpenter.alibabacloud.com/instance-cpu":    strconv.Itoa(s.VCPUs),
 				}
 			},
@@ -487,4 +487,13 @@ func WriteAll(snapshotDir, dir string, opts ...Option) (map[string]*Catalog, err
 		out[v.Name] = c
 	}
 	return out, nil
+}
+
+// seriesOrFamily is the hardware line (series) of a server, falling back to the
+// family where there is none (sc-crawler 0.10.4 made family a broad class).
+func seriesOrFamily(s keeper.Server) string {
+	if s.Series != nil && *s.Series != "" {
+		return *s.Series
+	}
+	return s.Family
 }
